@@ -6,8 +6,8 @@ import { useState, useEffect, useCallback, createContext, useContext, useRef } f
 const API_BASE = "http://localhost:8000";
 
 // ─── Context ─────────────────────────────────────────────────────────
-const AuthContext = createContext(null);
-const NotifContext = createContext(null);
+const AuthContext = createContext<any>(null);
+const NotifContext = createContext<any>(null);
 
 // ─── API Service Layer ───────────────────────────────────────────────
 const api = {
@@ -15,7 +15,7 @@ const api = {
   async request(method: string, path: string, body: any = null) {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (this.token) headers["Authorization"] = `Bearer ${this.token}`;
-    const opts = { method, headers };
+    const opts: { method: string; headers: Record<string, string>; body?: string } = { method, headers };
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(`${API_BASE}${path}`, opts);
     if (res.status === 401) {
@@ -31,10 +31,10 @@ const api = {
     if (res.status === 204) return null;
     return res.json();
   },
-  get: (p) => api.request("GET", p),
-  post: (p, b) => api.request("POST", p, b),
-  patch: (p, b) => api.request("PATCH", p, b),
-  del: (p) => api.request("DELETE", p),
+  get: (p: string) => api.request("GET", p),
+  post: (p: string, b: any) => api.request("POST", p, b),
+  patch: (p: string, b: any) => api.request("PATCH", p, b),
+  del: (p: string) => api.request("DELETE", p),
 };
 
 // ─── Icons (inline SVG components) ──────────────────────────────────
@@ -628,9 +628,9 @@ td .cell-sub { font-size: 12px; color: var(--text-muted); }
 `;
 
 // ─── Notification System ─────────────────────────────────────────────
-function NotifProvider({ children }) {
-  const [notifs, setNotifs] = useState([]);
-  const add = useCallback((msg, type = "success") => {
+function NotifProvider({ children }: { children: React.ReactNode }) {
+  const [notifs, setNotifs] = useState<any[]>([]);
+  const add = useCallback((msg: any, type: string = "success") => {
     const id = Date.now();
     setNotifs((n) => [...n, { id, msg, type }]);
     setTimeout(() => setNotifs((n) => n.filter((x) => x.id !== id)), 3500);
@@ -648,7 +648,7 @@ function NotifProvider({ children }) {
 }
 
 // ─── Modal Component ─────────────────────────────────────────────────
-function Modal({ title, onClose, children, footer }) {
+function Modal({ title, onClose, children, footer }: { title: any; onClose: any; children: any; footer?: any }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -671,14 +671,14 @@ function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: any) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
       await login(email, password);
-    } catch (err) {
-      setError(err.message || "Identifiants incorrects");
+    } catch (err: any) {
+      setError(err?.message || "Identifiants incorrects");
     }
     setLoading(false);
   };
@@ -730,7 +730,7 @@ function DashboardPage() {
         const lowStock = prodList.filter((p) => (p.current_stock ?? p.stock ?? 0) <= (p.minimum_stock ?? p.threshold ?? 10)).length;
         setStats({ products: prodList.length, suppliers: suppList.length, movements: mvtList.length, lowStock });
         setRecentMvts(mvtList.slice(0, 5));
-      } catch { notify("Erreur chargement dashboard", "error"); }
+      } catch (e: any) { notify("Erreur chargement dashboard", "error"); }
     })();
   }, []);
 
@@ -833,7 +833,7 @@ function ProductsPage() {
       setSuppliers(suppData.items || suppData || []);
       setLocations(locData.items || locData || []);
       setCategories(catData.items || catData || []);
-    } catch (e) { console.error("Erreur chargement données associées", e); }
+    } catch (e: any) { console.error("Erreur chargement données associées", e); }
   };
 
   const filtered = products.filter((p) =>
@@ -851,14 +851,14 @@ function ProductsPage() {
     setForm({ name: p.name, reference: p.reference || "", lot_number: p.lot_number || "", description: p.description || "", unit: p.unit || "unité", current_stock: p.current_stock ?? 0, minimum_stock: p.minimum_stock ?? 0, alert_stock: p.alert_stock ?? 0, expiry_date: p.expiry_date || "", supplier_id: p.supplier_id || "", location_id: p.location_id || "", category_id: p.category_id || "" });
     setModal("edit");
   };
-  const openDetails = async (p) => {
+  const openDetails = async (p: any) => {
     try {
       const data = await api.get(`/products/${p.id}`);
       setSelected(data);
       setModal("details");
     } catch { notify("Erreur chargement détails", "error"); }
   };
-  const openLots = async (p) => {
+  const openLots = async (p: any) => {
     setSelected(p);
     try {
       const data = await api.get(`/products/${p.id}/lots`);
@@ -1131,13 +1131,13 @@ function ProductsPage() {
 
 // ─── Suppliers Page ──────────────────────────────────────────────────
 function SuppliersPage() {
-  const [suppliers, setSuppliers] = useState([]);
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState(null);
-  const [selected, setSelected] = useState(null);
-  const [form, setForm] = useState({ name: "", contact: "", email: "", phone: "", address: "" });
-  const notify = useContext(NotifContext);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [search, setSearch] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(true);
+  const [modal, setModal] = useState<any>(null);
+  const [selected, setSelected] = useState<any>(null);
+  const [form, setForm] = useState<any>({ name: "", contact: "", email: "", phone: "", address: "" });
+  const notify = useContext(NotifContext) as any;
 
   const load = async () => {
     try {
@@ -1154,7 +1154,7 @@ function SuppliersPage() {
   );
 
   const openCreate = () => { setForm({ name: "", contact: "", email: "", phone: "", address: "" }); setModal("create"); };
-  const openEdit = (s) => {
+  const openEdit = (s: any) => {
     setSelected(s);
     setForm({ name: s.name, contact: s.contact || "", email: s.email || "", phone: s.phone || "", address: s.address || "" });
     setModal("edit");
@@ -1170,9 +1170,9 @@ function SuppliersPage() {
       }
       setModal(null);
       load();
-    } catch (e) { notify(e.message, "error"); }
+    } catch (e: any) { notify(e?.message || "Erreur", "error"); }
   };
-  const handleDelete = async (s) => {
+  const handleDelete = async (s: any) => {
     if (!confirm(`Supprimer "${s.name}" ?`)) return;
     try { await api.del(`/suppliers/${s.id}`); notify("Fournisseur supprimé"); load(); }
     catch (e) { notify(e.message, "error"); }
@@ -1184,7 +1184,7 @@ function SuppliersPage() {
         <div className="table-toolbar">
           <div className="search-input-wrap">
             {icons.search}
-            <input placeholder="Rechercher un fournisseur…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input placeholder="Rechercher un fournisseur…" value={search} onChange={(e: any) => setSearch(e.target.value)} />
           </div>
           <div style={{ flex: 1 }} />
           <button className="btn btn-primary btn-sm" onClick={openCreate}>{icons.plus} Nouveau fournisseur</button>
@@ -1263,7 +1263,7 @@ function MovementsPage() {
   const [form, setForm] = useState({ product_id: "", movement_type: "entry", quantity: 0, lot_number: "", reason: "", reference_document: "" });
   const notify = useContext(NotifContext);
 
-  const load = async (pageNum = 1) => {
+  const load = async (pageNum: number = 1) => {
     try {
       setLoading(true);
       const data = await api.get(`/movements/?page=${pageNum}&size=${pageSize}`);
@@ -1372,7 +1372,7 @@ function MovementsPage() {
               className="form-input"
               placeholder="Rechercher un produit…"
               value={searchProduct}
-              onChange={(e) => {
+              onChange={(e: any) => {
                 setSearchProduct(e.target.value);
                 const search = e.target.value.toLowerCase();
                 setFilteredProducts(products.filter(p => (p.name + (p.reference || "")).toLowerCase().includes(search)));
@@ -1385,8 +1385,8 @@ function MovementsPage() {
                     key={p.id}
                     onClick={() => { setForm({ ...form, product_id: p.id }); setSearchProduct(p.name); setFilteredProducts([]); }}
                     style={{ padding: "10px 12px", cursor: "pointer", borderBottom: "1px solid var(--border)", fontSize: 13 }}
-                    onMouseEnter={(e) => e.target.style.background = "var(--bg-hover)"}
-                    onMouseLeave={(e) => e.target.style.background = "transparent"}
+                    onMouseEnter={(e: any) => e.target.style.background = "var(--bg-hover)"}
+                    onMouseLeave={(e: any) => e.target.style.background = "transparent"}
                   >
                     <div style={{ color: "var(--text-primary)", fontWeight: 500 }}>{p.name}</div>
                     <div style={{ color: "var(--text-muted)", fontSize: 11 }}>Ref: {p.reference || "—"} | Stock: {p.current_stock || 0}</div>
@@ -1451,7 +1451,7 @@ function UsersPage() {
     setForm({ name: "", email: "", password: "", role: "viewer" });
     setModal("create");
   };
-  const openEdit = (u) => {
+  const openEdit = (u: any) => {
     setSelected(u);
     setForm({ name: u.name || "", email: u.email || "", password: "", role: u.role || "viewer" });
     setModal("edit");
@@ -1589,7 +1589,7 @@ function CategoriesPage() {
       }
       setModal(null);
       load();
-    } catch (e) { notify(e.message, "error"); }
+    } catch (e: any) { notify(e?.message || "Erreur", "error"); }
   };
   const handleDelete = async (c) => {
     if (!confirm(`Supprimer "${c.name}" ?`)) return;
@@ -1597,7 +1597,7 @@ function CategoriesPage() {
       await api.del(`/categories/${c.id}`);
       notify("Catégorie supprimée");
       load();
-    } catch (e) { notify(e.message, "error"); }
+    } catch (e: any) { notify(e?.message || "Erreur", "error"); }
   };
 
   return (
@@ -1606,7 +1606,7 @@ function CategoriesPage() {
         <div className="table-toolbar">
           <div className="search-input-wrap">
             {icons.search}
-            <input placeholder="Rechercher une catégorie…" value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input placeholder="Rechercher une catégorie…" value={search} onChange={(e: any) => setSearch(e.target.value)} />
           </div>
           <div style={{ flex: 1 }} />
           <button className="btn btn-primary btn-sm" onClick={() => {
@@ -1669,13 +1669,13 @@ function CategoriesPage() {
 
 // ─── Locations Page ──────────────────────────────────────────────────
 function LocationsPage() {
-  const [locations, setLocations] = useState([]);
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState(null);
-  const [selected, setSelected] = useState(null);
-  const [form, setForm] = useState({ name: "", description: "", temperature_controlled: false });
-  const notify = useContext(NotifContext);
+  const [locations, setLocations] = useState<any[]>([]);
+  const [search, setSearch] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(true);
+  const [modal, setModal] = useState<any>(null);
+  const [selected, setSelected] = useState<any>(null);
+  const [form, setForm] = useState<any>({ name: "", description: "", temperature_controlled: false });
+  const notify = useContext(NotifContext) as any;
 
   const load = async () => {
     try {
@@ -1700,7 +1700,7 @@ function LocationsPage() {
       }
       setModal(null);
       load();
-    } catch (e) { notify(e.message, "error"); }
+    } catch (e: any) { notify(e?.message || "Erreur", "error"); }
   };
   const handleDelete = async (l) => {
     if (!confirm(`Supprimer "${l.name}" ?`)) return;
@@ -1801,7 +1801,7 @@ const PAGE_META = {
   users: { title: "Utilisateurs", subtitle: "Gestion des accès" },
 };
 
-function AppShell({ user, onLogout }) {
+function AppShell({ user, onLogout }: { user: any; onLogout: any }) {
   const [page, setPage] = useState("dashboard");
   const meta = PAGE_META[page];
 
@@ -1856,20 +1856,20 @@ function AppShell({ user, onLogout }) {
 
 // ─── Root App with Auth ──────────────────────────────────────────────
 export default function App() {
-  const [user, setUser] = useState(null);
-  const [ready, setReady] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [ready, setReady] = useState<boolean>(false);
 
   useEffect(() => {
     const token = localStorage.getItem("labostock_token");
     if (token) {
       api.token = token;
-      api.get("/auth/me").then((u) => { setUser(u); setReady(true); }).catch(() => { api.token = null; localStorage.removeItem("labostock_token"); setReady(true); });
+      api.get("/auth/me").then((u: any) => { setUser(u); setReady(true); }).catch(() => { api.token = null; localStorage.removeItem("labostock_token"); setReady(true); });
     } else {
       setReady(true);
     }
   }, []);
 
-  const login = async (email, password) => {
+  const login = async (email: any, password: any) => {
     const data = await api.post("/auth/login", { email, password });
     api.token = data.access_token || data.token;
     localStorage.setItem("labostock_token", api.token);
