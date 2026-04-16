@@ -13,18 +13,45 @@ def get_current_user(
     db: Session = Depends(get_db),
 ) -> User:
     payload = decode_token(credentials.credentials)
+
     if payload.get("type") != "access":
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token invalide")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token invalide",
+        )
 
     user_id = payload.get("sub")
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token invalide",
+        )
+
+    try:
+        user_id_int = int(user_id)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token invalide",
+        )
+
+    user = db.query(User).filter(User.id == user_id_int).first()
 
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Utilisateur introuvable")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Utilisateur introuvable",
+        )
     if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Compte désactivé")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Compte désactivé",
+        )
     if user.status != UserStatus.active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Compte en attente d'activation")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Compte en attente d'activation",
+        )
 
     return user
 
