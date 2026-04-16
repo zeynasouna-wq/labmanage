@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     ALERT_CHECK_INTERVAL_HOURS: int = 24
     EXPIRY_ALERT_DAYS_BEFORE: int = 30
 
+    # CORS Configuration
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:8080,https://labmanage.onrender.com"
+
     class Config:
         env_file = ".env"
         case_sensitive = True
