@@ -4,10 +4,10 @@ Usage: python init_db.py
 """
 
 from sqlalchemy.orm import Session
-from backend.app.db.session import engine, Base, SessionLocal
-from backend.app.models.models import User, UserRole, UserStatus, Supplier, Location, Category
-from backend.app.core.security import get_password_hash
-from backend.app.core.config import settings
+from app.db.session import engine, Base, SessionLocal
+from app.models.models import User, UserRole, UserStatus, Supplier, Location, Category
+from app.core.security import get_password_hash
+from app.core.config import settings
 
 
 def init_db():
