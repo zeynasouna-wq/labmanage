@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.db.session import engine, Base
 from app.core.config import settings
 from app.routers import suppliers
-from app.routers import auth, movements, products, users, categories, locations
+from app.routers import auth, movements, products, users, categories, locations, export
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -38,6 +38,7 @@ app.include_router(products.router)
 app.include_router(movements.router)
 app.include_router(categories.router)
 app.include_router(locations.router)
+app.include_router(export.router)
 
 
 # Root endpoint
