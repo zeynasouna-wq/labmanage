@@ -3,7 +3,11 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
 
 // ─── API Configuration ───────────────────────────────────────────────
-const API_BASE = process.env.next_public_api_base || "https://labmanage.onrender.com";
+// Mode : défini via la variable NEXT_PUBLIC_API_BASE dans Vercel.
+//   - En local  : laisse vide → http://localhost:8000
+//   - En prod   : NEXT_PUBLIC_API_BASE = https://labmanage.onrender.com
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 
 // ─── Context ─────────────────────────────────────────────────────────
 const AuthContext = createContext<any>(null);
