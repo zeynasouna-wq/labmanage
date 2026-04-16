@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
 
 // ─── API Configuration ───────────────────────────────────────────────
-const API_BASE = "http://localhost:8000";
+const API_BASE = process.env.next_public_api_base || "https://labmanage.onrender.com";
 
 // ─── Context ─────────────────────────────────────────────────────────
 const AuthContext = createContext<any>(null);
@@ -74,6 +74,9 @@ const icons = {
   ),
   chevDown: (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+  ),
+  download: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
   ),
   flask: (
     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 3h6"/><path d="M10 3v6.5L4 18a1 1 0 0 0 .87 1.5h14.26A1 1 0 0 0 20 18l-6-8.5V3"/><path d="M7 15h10"/></svg>
@@ -1801,6 +1804,160 @@ const PAGE_META = {
   users: { title: "Utilisateurs", subtitle: "Gestion des accès" },
 };
 
+// ─── Export Button Component ────────────────────────────────────────
+function ExportButton({ token }: { token: string }) {
+  const [showMenu, setShowMenu] = useState(false);
+  const [loading, setLoading] = useState<string | null>(null);
+  const { showNotif } = useContext(NotifContext);
+
+  const exportOptions = [
+    { key: "all", label: "📦 Tous les enregistrements (ZIP)", icon: "⬇️" },
+    { key: "products", label: "Produits", icon: "📦" },
+    { key: "movements", label: "Mouvements de stock", icon: "📜" },
+    { key: "alerts", label: "Alertes", icon: "⚠️" },
+    { key: "users", label: "Utilisateurs", icon: "👥" },
+    { key: "suppliers", label: "Fournisseurs", icon: "🏢" },
+    { key: "locations", label: "Localisations", icon: "📍" },
+    { key: "categories", label: "Catégories", icon: "🏷️" },
+    { key: "lots", label: "Lots de produits", icon: "📋" },
+  ];
+
+  const download = async (endpoint: string) => {
+    try {
+      setLoading(endpoint);
+      const url = `${API_BASE}/export/csv/${endpoint}`;
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        throw new Error("Erreur lors de l'export");
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = `labmanage_${endpoint}_${new Date().toISOString().split("T")[0]}.${endpoint === "all" ? "zip" : "csv"}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(downloadUrl);
+
+      showNotif?.({
+        type: "success",
+        title: "Export réussi",
+        message: `Téléchargement de ${endpoint} effectué`,
+      });
+      setShowMenu(false);
+    } catch (error) {
+      showNotif?.({
+        type: "error",
+        title: "Erreur d'export",
+        message: error instanceof Error ? error.message : "Erreur inconnue",
+      });
+    } finally {
+      setLoading(null);
+    }
+  };
+
+  return (
+    <div style={{ position: "relative" }}>
+      <button
+        onClick={() => setShowMenu(!showMenu)}
+        disabled={loading !== null}
+        className="btn btn-primary"
+        style={{ display: "flex", alignItems: "center", gap: "8px" }}
+      >
+        {icons.download}
+        Exporter
+      </button>
+
+      {showMenu && (
+        <div
+          style={{
+            position: "absolute",
+            top: "100%",
+            right: 0,
+            marginTop: "8px",
+            backgroundColor: "var(--bg-secondary)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-lg)",
+            boxShadow: "var(--shadow)",
+            zIndex: 1000,
+            minWidth: "280px",
+            overflow: "hidden",
+          }}
+        >
+          <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", backgroundColor: "var(--bg-tertiary)" }}>
+            <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              Télécharger les données
+            </div>
+          </div>
+
+          <div style={{ maxHeight: "400px", overflowY: "auto" }}>
+            {exportOptions.map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => download(opt.key)}
+                disabled={loading !== null}
+                style={{
+                  width: "100%",
+                  padding: "12px 16px",
+                  border: "none",
+                  backgroundColor: "transparent",
+                  color: loading === opt.key ? "var(--accent)" : "var(--text-primary)",
+                  cursor: loading ? "not-allowed" : "pointer",
+                  fontSize: "13px",
+                  textAlign: "left",
+                  transition: "all 0.15s ease",
+                  borderBottom: "1px solid var(--border)",
+                  opacity: loading && loading !== opt.key ? 0.5 : 1,
+                }}
+                onMouseEnter={(e) => {
+                  if (!loading)
+                    (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--bg-hover)";
+                }}
+                onMouseLeave={(e) => {
+                  if (!loading)
+                    (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent";
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  {loading === opt.key && (
+                    <span
+                      style={{
+                        display: "inline-block",
+                        width: "4px",
+                        height: "4px",
+                        borderRadius: "50%",
+                        backgroundColor: "var(--accent)",
+                        animation: "pulse 1s infinite",
+                      }}
+                    />
+                  )}
+                  {opt.label}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <div style={{ padding: "8px 16px", backgroundColor: "var(--bg-tertiary)", borderTop: "1px solid var(--border)", fontSize: "11px", color: "var(--text-muted)" }}>
+            Format CSV (ZIP pour tous les enregistrements)
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 0.5; }
+          50% { opacity: 1; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 function AppShell({ user, onLogout }: { user: any; onLogout: any }) {
   const [page, setPage] = useState("dashboard");
   const meta = (PAGE_META as any)[page];
@@ -1839,6 +1996,9 @@ function AppShell({ user, onLogout }: { user: any; onLogout: any }) {
             <div className="page-title">{meta.title}</div>
             <div className="page-subtitle">{meta.subtitle}</div>
           </div>
+          {user?.role === "admin" && (
+            <ExportButton token={api.token || ""} />
+          )}
         </div>
         <div className="page-body">
           {page === "dashboard" && <DashboardPage />}
