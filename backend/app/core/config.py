@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     EXPIRY_ALERT_DAYS_BEFORE: int = 30
 
     # CORS Configuration
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:8080,https://labmanage.onrender.com"
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:8080,https://labmanage.onrender.com,https://labmanage-ag53.vercel.app"
 
     class Config:
         env_file = ".env"
