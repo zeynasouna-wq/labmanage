@@ -11,7 +11,7 @@ const NotifContext = createContext<any>(null);
 
 // ─── API Service Layer ───────────────────────────────────────────────
 const api = {
-  token: null,
+  token: null as string | null,
   async request(method: string, path: string, body: any = null) {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (this.token) headers["Authorization"] = `Bearer ${this.token}`;
@@ -712,8 +712,8 @@ function LoginPage() {
 
 // ─── Dashboard ───────────────────────────────────────────────────────
 function DashboardPage() {
-  const [stats, setStats] = useState(null);
-  const [recentMvts, setRecentMvts] = useState([]);
+  const [stats, setStats] = useState<any>(null);
+  const [recentMvts, setRecentMvts] = useState<any[]>([]);
   const notify = useContext(NotifContext);
 
   useEffect(() => {
@@ -727,7 +727,7 @@ function DashboardPage() {
         const prodList = products.items || products || [];
         const suppList = suppliers.items || suppliers || [];
         const mvtList = movements.items || movements || [];
-        const lowStock = prodList.filter((p) => (p.current_stock ?? p.stock ?? 0) <= (p.minimum_stock ?? p.threshold ?? 10)).length;
+        const lowStock = prodList.filter((p: any) => (p.current_stock ?? p.stock ?? 0) <= (p.minimum_stock ?? p.threshold ?? 10)).length;
         setStats({ products: prodList.length, suppliers: suppList.length, movements: mvtList.length, lowStock });
         setRecentMvts(mvtList.slice(0, 5));
       } catch (e: any) { notify("Erreur chargement dashboard", "error"); }
@@ -800,17 +800,17 @@ function DashboardPage() {
 
 // ─── Products Page ───────────────────────────────────────────────────
 function ProductsPage() {
-  const [products, setProducts] = useState([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState(null); // null | 'create' | 'edit' | 'lots' | 'details'
-  const [selected, setSelected] = useState(null);
-  const [lots, setLots] = useState([]);
-  const [suppliers, setSuppliers] = useState([]);
-  const [locations, setLocations] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [form, setForm] = useState({ name: "", reference: "", lot_number: "", description: "", unit: "unité", current_stock: 0, minimum_stock: 0, alert_stock: 0, expiry_date: "", supplier_id: "", location_id: "", category_id: "" });
-  const [lotForm, setLotForm] = useState({ lot_number: "", quantity: 0, expiry_date: "" });
+  const [modal, setModal] = useState<any>(null); // null | 'create' | 'edit' | 'lots' | 'details'
+  const [selected, setSelected] = useState<any>(null);
+  const [lots, setLots] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [form, setForm] = useState<any>({ name: "", reference: "", lot_number: "", description: "", unit: "unité", current_stock: 0, minimum_stock: 0, alert_stock: 0, expiry_date: "", supplier_id: "", location_id: "", category_id: "" });
+  const [lotForm, setLotForm] = useState<any>({ lot_number: "", quantity: 0, expiration_date: "" });
   const notify = useContext(NotifContext);
 
   const load = async () => {
@@ -836,7 +836,7 @@ function ProductsPage() {
     } catch (e: any) { console.error("Erreur chargement données associées", e); }
   };
 
-  const filtered = products.filter((p) =>
+  const filtered = products.filter((p: any) =>
     (p.name + (p.reference || "")).toLowerCase().includes(search.toLowerCase())
   );
 
@@ -845,7 +845,7 @@ function ProductsPage() {
     setForm({ name: "", reference: "", lot_number: "", description: "", unit: "unité", current_stock: 0, minimum_stock: 0, alert_stock: 0, expiry_date: "", supplier_id: "", location_id: "", category_id: "" });
     setModal("create");
   };
-  const openEdit = (p) => {
+  const openEdit = (p: any) => {
     loadRelatedData();
     setSelected(p);
     setForm({ name: p.name, reference: p.reference || "", lot_number: p.lot_number || "", description: p.description || "", unit: p.unit || "unité", current_stock: p.current_stock ?? 0, minimum_stock: p.minimum_stock ?? 0, alert_stock: p.alert_stock ?? 0, expiry_date: p.expiry_date || "", supplier_id: p.supplier_id || "", location_id: p.location_id || "", category_id: p.category_id || "" });
@@ -889,15 +889,15 @@ function ProductsPage() {
       }
       setModal(null);
       load();
-    } catch (e) { notify(e.message, "error"); }
+    } catch (e: any) { notify(e?.message || "Erreur", "error"); }
   };
-  const handleDelete = async (p) => {
+  const handleDelete = async (p: any) => {
     if (!confirm(`Archiver "${p.name}" ?`)) return;
     try {
       await api.del(`/products/${p.id}`);
       notify("Produit archivé");
       load();
-    } catch (e) { notify(e.message, "error"); }
+    } catch (e: any) { notify(e?.message || "Erreur", "error"); }
   };
   const handleAddLot = async () => {
     try {
@@ -906,7 +906,7 @@ function ProductsPage() {
       const data = await api.get(`/products/${selected.id}/lots`);
       setLots(data.items || data || []);
       setLotForm({ lot_number: "", quantity: 0, expiration_date: "" });
-    } catch (e) { notify(e.message, "error"); }
+    } catch (e: any) { notify(e?.message || "Erreur", "error"); }
   };
 
   return (
@@ -935,7 +935,7 @@ function ProductsPage() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr><td colSpan={6}><div className="empty-state"><p>Aucun produit trouvé</p></div></td></tr>
-              ) : filtered.map((p) => {
+              ) : filtered.map((p: any) => {
                 const stock = p.current_stock ?? p.stock ?? 0;
                 const low = stock <= (p.minimum_stock ?? 0);
                 return (
@@ -1015,14 +1015,14 @@ function ProductsPage() {
               <label className="form-label">Fournisseur</label>
               <select className="form-input form-select" value={form.supplier_id} onChange={(e) => setForm({ ...form, supplier_id: e.target.value })}>
                 <option value="">Aucun</option>
-                {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
             <div className="form-group">
               <label className="form-label">Localisation</label>
               <select className="form-input form-select" value={form.location_id} onChange={(e) => setForm({ ...form, location_id: e.target.value })}>
                 <option value="">Aucune</option>
-                {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                {locations.map((l: any) => <option key={l.id} value={l.id}>{l.name}</option>)}
               </select>
             </div>
             <div className="form-group">
@@ -1175,7 +1175,7 @@ function SuppliersPage() {
   const handleDelete = async (s: any) => {
     if (!confirm(`Supprimer "${s.name}" ?`)) return;
     try { await api.del(`/suppliers/${s.id}`); notify("Fournisseur supprimé"); load(); }
-    catch (e) { notify(e.message, "error"); }
+    catch (e: any) { notify(e?.message || "Erreur", "error"); }
   };
 
   return (
@@ -1195,7 +1195,7 @@ function SuppliersPage() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr><td colSpan={5}><div className="empty-state"><p>Aucun fournisseur</p></div></td></tr>
-              ) : filtered.map((s) => (
+              ) : filtered.map((s: any) => (
                 <tr key={s.id}>
                   <td className="cell-main">{s.name}</td>
                   <td>{s.contact || "—"}</td>
@@ -1251,19 +1251,19 @@ function SuppliersPage() {
 
 // ─── Movements Page ──────────────────────────────────────────────────
 function MovementsPage() {
-  const [movements, setMovements] = useState([]);
+  const [movements, setMovements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [pageSize] = useState(30);
   const [modal, setModal] = useState(false);
-  const [products, setProducts] = useState([]);
+  const [products, setProducts] = useState<any[]>([]);
   const [searchProduct, setSearchProduct] = useState("");
-  const [filteredProducts, setFilteredProducts] = useState([]);
-  const [form, setForm] = useState({ product_id: "", movement_type: "entry", quantity: 0, lot_number: "", reason: "", reference_document: "" });
+  const [filteredProducts, setFilteredProducts] = useState<any[]>([]);
+  const [form, setForm] = useState<any>({ product_id: "", movement_type: "entry", quantity: 0, lot_number: "", reason: "", reference_document: "" });
   const notify = useContext(NotifContext);
 
-  const load = async (pageNum: number = 1) => {
+  const load = async (pageNum = 1) => {
     try {
       setLoading(true);
       const data = await api.get(`/movements/?page=${pageNum}&size=${pageSize}`);
@@ -1294,7 +1294,7 @@ function MovementsPage() {
       const payload = {
         product_id: parseInt(form.product_id),
         movement_type: form.movement_type,
-        quantity: parseInt(form.quantity),
+        quantity: parseInt(String(form.quantity)),
         lot_number: form.lot_number || null,
         reason: form.reason || null,
         reference_document: form.reference_document || null,
@@ -1303,7 +1303,7 @@ function MovementsPage() {
       notify("Mouvement enregistré");
       setModal(false);
       load();
-    } catch (e) { notify(e.message, "error"); }
+    } catch (e: any) { notify(e?.message || "Erreur", "error"); }
   };
 
   return (
@@ -1321,7 +1321,7 @@ function MovementsPage() {
               <tbody>
                 {movements.length === 0 ? (
                   <tr><td colSpan={6}><div className="empty-state"><p>Aucun mouvement</p></div></td></tr>
-                ) : movements.map((m, i) => {
+                ) : movements.map((m: any, i: number) => {
                   const isIn = m.movement_type === "entry" || m.type === "entry" || m.type === "in" || m.type === "IN";
                   return (
                     <tr key={i}>
@@ -1372,15 +1372,15 @@ function MovementsPage() {
               className="form-input"
               placeholder="Rechercher un produit…"
               value={searchProduct}
-              onChange={(e: any) => {
+              onChange={(e) => {
                 setSearchProduct(e.target.value);
                 const search = e.target.value.toLowerCase();
-                setFilteredProducts(products.filter(p => (p.name + (p.reference || "")).toLowerCase().includes(search)));
+                setFilteredProducts(products.filter((p: any) => (p.name + (p.reference || "")).toLowerCase().includes(search)));
               }}
             />
             {searchProduct && filteredProducts.length > 0 && (
               <div style={{ marginTop: 6, border: "1px solid var(--border)", borderRadius: "var(--radius)", maxHeight: 150, overflowY: "auto", background: "var(--bg-secondary)" }}>
-                {filteredProducts.map((p) => (
+                {filteredProducts.map((p: any) => (
                   <div
                     key={p.id}
                     onClick={() => { setForm({ ...form, product_id: p.id }); setSearchProduct(p.name); setFilteredProducts([]); }}
@@ -1430,11 +1430,11 @@ function MovementsPage() {
 
 // ─── Users Page ──────────────────────────────────────────────────────
 function UsersPage() {
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState(null);
-  const [selected, setSelected] = useState(null);
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "viewer" });
+  const [modal, setModal] = useState<any>(null);
+  const [selected, setSelected] = useState<any>(null);
+  const [form, setForm] = useState<any>({ name: "", email: "", password: "", role: "viewer" });
   const notify = useContext(NotifContext);
 
   const load = async () => {
@@ -1468,20 +1468,20 @@ function UsersPage() {
       }
       setModal(null);
       load();
-    } catch (e) { notify(e.message, "error"); }
+    } catch (e: any) { notify(e?.message || "Erreur", "error"); }
   };
-  const handleDelete = async (u) => {
+  const handleDelete = async (u: any) => {
     if (!confirm(`Désactiver "${u.name}" ?`)) return;
     try { await api.del(`/users/${u.id}`); notify("Utilisateur désactivé"); load(); }
-    catch (e) { notify(e.message, "error"); }
+    catch (e: any) { notify(e?.message || "Erreur", "error"); }
   };
 
-  const roleLabel = (r) => {
-    const m = { admin: "Admin", technician: "Technicien", viewer: "Lecteur" };
+  const roleLabel = (r: any) => {
+    const m: Record<string, string> = { admin: "Admin", technician: "Technicien", viewer: "Lecteur" };
     return m[r] || r;
   };
-  const roleBadge = (r) => {
-    const m = { admin: "badge-warning", technician: "badge-info", viewer: "badge-muted" };
+  const roleBadge = (r: any) => {
+    const m: Record<string, string> = { admin: "badge-warning", technician: "badge-info", viewer: "badge-muted" };
     return m[r] || "badge-muted";
   };
 
@@ -1499,7 +1499,7 @@ function UsersPage() {
             <tbody>
               {users.length === 0 ? (
                 <tr><td colSpan={5}><div className="empty-state"><p>Aucun utilisateur</p></div></td></tr>
-              ) : users.map((u) => (
+              ) : users.map((u: any) => (
                 <tr key={u.id}>
                   <td>
                     <div className="cell-main">{u.name}</div>
@@ -1558,12 +1558,12 @@ function UsersPage() {
 
 // ─── Categories Page ─────────────────────────────────────────────────
 function CategoriesPage() {
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState(null);
-  const [selected, setSelected] = useState(null);
-  const [form, setForm] = useState({ name: "", description: "", color: "#2DD4A8" });
+  const [modal, setModal] = useState<any>(null);
+  const [selected, setSelected] = useState<any>(null);
+  const [form, setForm] = useState<any>({ name: "", description: "", color: "#2DD4A8" });
   const notify = useContext(NotifContext);
 
   const load = async () => {
@@ -1576,7 +1576,7 @@ function CategoriesPage() {
   };
   useEffect(() => { load(); }, []);
 
-  const filtered = categories.filter((c) => (c.name || "").toLowerCase().includes(search.toLowerCase()));
+  const filtered = categories.filter((c: any) => (c.name || "").toLowerCase().includes(search.toLowerCase()));
 
   const handleSave = async () => {
     try {
@@ -1591,7 +1591,7 @@ function CategoriesPage() {
       load();
     } catch (e: any) { notify(e?.message || "Erreur", "error"); }
   };
-  const handleDelete = async (c) => {
+  const handleDelete = async (c: any) => {
     if (!confirm(`Supprimer "${c.name}" ?`)) return;
     try {
       await api.del(`/categories/${c.id}`);
@@ -1606,7 +1606,7 @@ function CategoriesPage() {
         <div className="table-toolbar">
           <div className="search-input-wrap">
             {icons.search}
-            <input placeholder="Rechercher une catégorie…" value={search} onChange={(e: any) => setSearch(e.target.value)} />
+            <input placeholder="Rechercher une catégorie…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <div style={{ flex: 1 }} />
           <button className="btn btn-primary btn-sm" onClick={() => {
@@ -1620,7 +1620,7 @@ function CategoriesPage() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr><td colSpan={4}><div className="empty-state"><p>Aucune catégorie trouvée</p></div></td></tr>
-              ) : filtered.map((c) => (
+              ) : filtered.map((c: any) => (
                 <tr key={c.id}>
                   <td><div style={{ width: 24, height: 24, borderRadius: "var(--radius)", background: c.color || "var(--bg-tertiary)" }} /></td>
                   <td className="cell-main">{c.name}</td>
@@ -1670,12 +1670,12 @@ function CategoriesPage() {
 // ─── Locations Page ──────────────────────────────────────────────────
 function LocationsPage() {
   const [locations, setLocations] = useState<any[]>([]);
-  const [search, setSearch] = useState<string>("");
-  const [loading, setLoading] = useState<boolean>(true);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<any>(null);
   const [selected, setSelected] = useState<any>(null);
   const [form, setForm] = useState<any>({ name: "", description: "", temperature_controlled: false });
-  const notify = useContext(NotifContext) as any;
+  const notify = useContext(NotifContext);
 
   const load = async () => {
     try {
@@ -1687,7 +1687,7 @@ function LocationsPage() {
   };
   useEffect(() => { load(); }, []);
 
-  const filtered = locations.filter((l) => (l.name || "").toLowerCase().includes(search.toLowerCase()));
+  const filtered = locations.filter((l: any) => (l.name || "").toLowerCase().includes(search.toLowerCase()));
 
   const handleSave = async () => {
     try {
@@ -1702,13 +1702,13 @@ function LocationsPage() {
       load();
     } catch (e: any) { notify(e?.message || "Erreur", "error"); }
   };
-  const handleDelete = async (l) => {
+  const handleDelete = async (l: any) => {
     if (!confirm(`Supprimer "${l.name}" ?`)) return;
     try {
       await api.del(`/locations/${l.id}`);
       notify("Localisation supprimée");
       load();
-    } catch (e) { notify(e.message, "error"); }
+    } catch (e: any) { notify(e?.message || "Erreur", "error"); }
   };
 
   return (
@@ -1731,7 +1731,7 @@ function LocationsPage() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr><td colSpan={4}><div className="empty-state"><p>Aucune localisation trouvée</p></div></td></tr>
-              ) : filtered.map((l) => (
+              ) : filtered.map((l: any) => (
                 <tr key={l.id}>
                   <td className="cell-main">{l.name}</td>
                   <td style={{ fontSize: 13 }}>{l.description || "—"}</td>
@@ -1803,7 +1803,7 @@ const PAGE_META = {
 
 function AppShell({ user, onLogout }: { user: any; onLogout: any }) {
   const [page, setPage] = useState("dashboard");
-  const meta = PAGE_META[page];
+  const meta = (PAGE_META as any)[page];
 
   return (
     <div className="lab-app">
@@ -1815,7 +1815,7 @@ function AppShell({ user, onLogout }: { user: any; onLogout: any }) {
         </div>
         <nav className="sidebar-nav">
           <div className="sidebar-section-label">Navigation</div>
-          {NAV.map((n) => (
+          {NAV.map((n: any) => (
             <div key={n.key} className={`nav-item ${page === n.key ? "active" : ""}`} onClick={() => setPage(n.key)}>
               {n.icon}
               {n.label}
@@ -1872,7 +1872,7 @@ export default function App() {
   const login = async (email: any, password: any) => {
     const data = await api.post("/auth/login", { email, password });
     api.token = data.access_token || data.token;
-    localStorage.setItem("labostock_token", api.token);
+    localStorage.setItem("labostock_token", api.token || "");
     const me = await api.get("/auth/me");
     setUser(me);
   };
