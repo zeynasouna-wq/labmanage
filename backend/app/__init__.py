@@ -1,0 +1,1 @@
+"""LaboStock Application Package"""
