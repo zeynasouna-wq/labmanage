@@ -13,7 +13,7 @@ const NotifContext = createContext(null);
 const api = {
   token: null,
   async request(method: string, path: string, body: any = null) {
-    const headers = { "Content-Type": "application/json" };
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (this.token) headers["Authorization"] = `Bearer ${this.token}`;
     const opts = { method, headers };
     if (body) opts.body = JSON.stringify(body);
