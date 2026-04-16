@@ -46,7 +46,13 @@ class Settings(BaseSettings):
         "your-secret-key-change-this-in-production"
     )
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "480"))
+    REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+    
+    # Admin Configuration
+    FIRST_ADMIN_NAME: str = os.getenv("FIRST_ADMIN_NAME", "Administrator")
+    FIRST_ADMIN_EMAIL: str = os.getenv("FIRST_ADMIN_EMAIL", "admin@labomanage.local")
+    FIRST_ADMIN_PASSWORD: str = os.getenv("FIRST_ADMIN_PASSWORD", "Admin@2024!")
     
     class Config:
         env_file = ".env"
