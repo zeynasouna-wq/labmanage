@@ -12,7 +12,7 @@ const NotifContext = createContext(null);
 // ─── API Service Layer ───────────────────────────────────────────────
 const api = {
   token: null,
-  async request(method, path, body = null) {
+  async request(method: string, path: string, body: any = null) {
     const headers = { "Content-Type": "application/json" };
     if (this.token) headers["Authorization"] = `Bearer ${this.token}`;
     const opts = { method, headers };
