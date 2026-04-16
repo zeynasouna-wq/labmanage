@@ -39,7 +39,7 @@ class Settings(BaseSettings):
         "http://localhost:3000,"
         "http://localhost:8080,"
         "https://labmanage.onrender.com,"
-        "https://labmanage-ag53.vercel.app"
+        "https://labmanage.vercel.app"
     )
 
     class Config:
