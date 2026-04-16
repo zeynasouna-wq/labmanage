@@ -1,71 +1,57 @@
 """
 LaboStock - Laboratory Stock Management System
-FastAPI Main Application
+Configuration Settings
 """
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from app.db.session import engine, Base
-from app.core.config import settings
-from app.routers import suppliers
-from app.routers import auth, movements, products, users, categories, locations, export
-
-# Create database tables
-Base.metadata.create_all(bind=engine)
-
-# Initialize FastAPI app
-app = FastAPI(
-    title=settings.APP_NAME,
-    description="Laboratory stock management and inventory tracking system",
-    version=settings.APP_VERSION,
-    debug=settings.DEBUG,
-)
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins_list,   # ← liste parsée et strippée
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Include routers
-app.include_router(auth.router)
-app.include_router(users.router)
-app.include_router(suppliers.router)
-app.include_router(products.router)
-app.include_router(movements.router)
-app.include_router(categories.router)
-app.include_router(locations.router)
-app.include_router(export.router)
+from pydantic_settings import BaseSettings
+from typing import Optional
+import os
 
 
-# Root endpoint
-@app.get("/", tags=["Health"])
-def read_root():
-    """API Health Check"""
-    return {
-        "status": "ok",
-        "app": settings.APP_NAME,
-        "version": settings.APP_VERSION,
-    }
-
-
-@app.get("/health", tags=["Health"])
-def health_check():
-    """Detailed health check endpoint"""
-    return {
-        "status": "healthy",
-        "database": "connected",
-    }
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="127.0.0.1",
-        port=8000,
-        reload=True,
+class Settings(BaseSettings):
+    """Application Settings"""
+    
+    # Environment
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "local")  # "local" or "production"
+    
+    # Application
+    APP_NAME: str = "LaboStock"
+    APP_VERSION: str = "1.0.0"
+    DEBUG: bool = ENVIRONMENT == "local"
+    
+    # Database
+    DATABASE_URL: str = os.getenv(
+        "DATABASE_URL",
+        "sqlite:///./labmanage.db"
     )
+    
+    # API Configuration
+    API_HOST: str = os.getenv("API_HOST", "127.0.0.1")
+    API_PORT: int = int(os.getenv("API_PORT", "8000"))
+    
+    # CORS
+    CORS_ORIGINS: str = os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000"
+    )
+    
+    @property
+    def cors_origins_list(self) -> list:
+        """Parse CORS origins from comma-separated string"""
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
+    
+    # JWT Settings
+    SECRET_KEY: str = os.getenv(
+        "SECRET_KEY",
+        "your-secret-key-change-this-in-production"
+    )
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    
+    class Config:
+        env_file = ".env"
+        case_sensitive = True
+
+
+# Create global settings instance
+settings = Settings()
