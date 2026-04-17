@@ -180,14 +180,13 @@ class ProductLotResponse(BaseModel):
 
 class ProductCreate(BaseModel):
     name: str
-    reference: str  # OBLIGATOIRE et UNIQUE
+    reference: str
     description: Optional[str] = None
     minimum_stock: int = 0
     alert_stock: int = 0
     supplier_id: Optional[int] = None
     location_id: Optional[int] = None
     category_id: Optional[int] = None
-    # Lots - optionnel, peuvent être ajoutés après
     lots: List[ProductLotCreate] = []
 
     @field_validator("reference")
@@ -204,6 +203,20 @@ class ProductCreate(BaseModel):
             raise ValueError("Le nom du produit est obligatoire")
         return v.strip()
 
+    @field_validator("minimum_stock")
+    @classmethod
+    def minimum_stock_non_negative(cls, v):
+        if v < 0:
+            raise ValueError("Le stock minimum ne peut pas être négatif")
+        return v
+
+    @field_validator("alert_stock")
+    @classmethod
+    def alert_stock_non_negative(cls, v):
+        if v < 0:
+            raise ValueError("Le seuil d'alerte ne peut pas être négatif")
+        return v
+
 
 class ProductUpdate(BaseModel):
     name: Optional[str] = None
@@ -216,13 +229,27 @@ class ProductUpdate(BaseModel):
     category_id: Optional[int] = None
     is_active: Optional[bool] = None
 
+    @field_validator("minimum_stock")
+    @classmethod
+    def minimum_stock_non_negative(cls, v):
+        if v is not None and v < 0:
+            raise ValueError("Le stock minimum ne peut pas être négatif")
+        return v
+
+    @field_validator("alert_stock")
+    @classmethod
+    def alert_stock_non_negative(cls, v):
+        if v is not None and v < 0:
+            raise ValueError("Le seuil d'alerte ne peut pas être négatif")
+        return v
+
 
 class ProductResponse(BaseModel):
     id: int
     name: str
-    reference: str  # Toujours présent
+    reference: str
     description: Optional[str] = None
-    current_stock: int  # Calculé à partir des lots
+    current_stock: int
     minimum_stock: int
     alert_stock: int
     is_active: bool
@@ -256,7 +283,7 @@ class ProductSummary(BaseModel):
 
 class StockMovementCreate(BaseModel):
     product_id: int
-    lot_id: int  # OBLIGATOIRE - Le lot concerné
+    lot_id: int
     movement_type: MovementType
     quantity: int
     reason: Optional[str] = None

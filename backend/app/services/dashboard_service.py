@@ -1,7 +1,7 @@
 from datetime import date, datetime, timedelta
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, and_
-from app.models.models import Product, StockMovement, Alert, AlertStatus, AlertType, MovementType
+from app.models.models import Product, ProductLot, StockMovement, Alert, AlertStatus, AlertType, MovementType
 from app.schemas.schemas import DashboardStats, StockReport
 from app.core.config import settings
 
@@ -12,10 +12,10 @@ def get_dashboard_stats(db: Session) -> DashboardStats:
     expiry_warning = settings.EXPIRY_ALERT_DAYS_BEFORE
 
     total_products = db.query(Product).filter(Product.is_active == True).count()
-    active_products = total_products
 
     out_of_stock = db.query(Product).filter(
-        Product.is_active == True, Product.current_stock == 0
+        Product.is_active == True,
+        Product.current_stock == 0,
     ).count()
 
     low_stock = db.query(Product).filter(
@@ -25,18 +25,33 @@ def get_dashboard_stats(db: Session) -> DashboardStats:
         Product.current_stock <= Product.alert_stock,
     ).count()
 
-    expiring_soon = db.query(Product).filter(
-        Product.is_active == True,
-        Product.expiry_date != None,
-        Product.expiry_date > today,
-        Product.expiry_date <= today + timedelta(days=expiry_warning),
-    ).count()
+    # expiry_date is on ProductLot, not on Product — query via lots
+    expiring_soon = (
+        db.query(Product.id)
+        .join(Product.lots)
+        .filter(
+            Product.is_active == True,
+            ProductLot.expiry_date != None,
+            ProductLot.expiry_date > today,
+            ProductLot.expiry_date <= today + timedelta(days=expiry_warning),
+            ProductLot.quantity > 0,
+        )
+        .distinct()
+        .count()
+    )
 
-    expired = db.query(Product).filter(
-        Product.is_active == True,
-        Product.expiry_date != None,
-        Product.expiry_date <= today,
-    ).count()
+    expired = (
+        db.query(Product.id)
+        .join(Product.lots)
+        .filter(
+            Product.is_active == True,
+            ProductLot.expiry_date != None,
+            ProductLot.expiry_date <= today,
+            ProductLot.quantity > 0,
+        )
+        .distinct()
+        .count()
+    )
 
     movements_today = db.query(StockMovement).filter(
         StockMovement.created_at >= today_start
@@ -46,7 +61,7 @@ def get_dashboard_stats(db: Session) -> DashboardStats:
 
     return DashboardStats(
         total_products=total_products,
-        active_products=active_products,
+        active_products=total_products,
         out_of_stock=out_of_stock,
         low_stock=low_stock,
         expiring_soon=expiring_soon,
@@ -59,17 +74,27 @@ def get_dashboard_stats(db: Session) -> DashboardStats:
 def get_stock_report(db: Session) -> list[StockReport]:
     today = date.today()
     expiry_warning = settings.EXPIRY_ALERT_DAYS_BEFORE
-    products = db.query(Product).filter(Product.is_active == True).all()
+
+    products = (
+        db.query(Product)
+        .options(joinedload(Product.lots), joinedload(Product.supplier), joinedload(Product.location))
+        .filter(Product.is_active == True)
+        .all()
+    )
 
     report = []
     for p in products:
+        # Determine earliest relevant expiry from lots
+        lot_expiries = [lot.expiry_date for lot in p.lots if lot.expiry_date and lot.quantity > 0]
+        nearest_expiry = min(lot_expiries) if lot_expiries else None
+
         if p.current_stock == 0:
             status = "out"
         elif p.alert_stock > 0 and p.current_stock <= p.alert_stock:
             status = "low"
-        elif p.expiry_date and p.expiry_date <= today:
+        elif nearest_expiry and nearest_expiry <= today:
             status = "expired"
-        elif p.expiry_date and p.expiry_date <= today + timedelta(days=expiry_warning):
+        elif nearest_expiry and nearest_expiry <= today + timedelta(days=expiry_warning):
             status = "expiring"
         else:
             status = "ok"
@@ -81,7 +106,7 @@ def get_stock_report(db: Session) -> list[StockReport]:
             current_stock=p.current_stock,
             minimum_stock=p.minimum_stock,
             alert_stock=p.alert_stock,
-            expiry_date=p.expiry_date,
+            expiry_date=nearest_expiry,
             supplier_name=p.supplier.name if p.supplier else None,
             location_name=p.location.name if p.location else None,
             status=status,

@@ -6,6 +6,11 @@ from app.models.models import Product, ProductLot, Supplier, Location, Category
 from app.schemas.schemas import ProductCreate, ProductUpdate, ProductLotCreate
 
 
+def _sync_stock(db: Session, product: Product) -> None:
+    """Recompute and persist product.current_stock from its lots."""
+    product.current_stock = sum(lot.quantity for lot in product.lots)
+
+
 def get_products(
     db: Session,
     skip: int = 0,
@@ -45,26 +50,30 @@ def get_products(
 
 
 def get_product(db: Session, product_id: int) -> Product:
-    product = db.query(Product).options(
-        joinedload(Product.supplier),
-        joinedload(Product.location),
-        joinedload(Product.category),
-        joinedload(Product.lots),
-    ).filter(Product.id == product_id).first()
+    product = (
+        db.query(Product)
+        .options(
+            joinedload(Product.supplier),
+            joinedload(Product.location),
+            joinedload(Product.category),
+            joinedload(Product.lots),
+        )
+        .filter(Product.id == product_id)
+        .first()
+    )
     if not product:
         raise HTTPException(status_code=404, detail="Produit introuvable")
     return product
 
 
 def create_product(db: Session, data: ProductCreate) -> Product:
-    # Validate uniqueness of reference
-    existing = db.query(Product).filter(Product.reference == data.reference).first()
-    if existing:
+    # Check reference uniqueness
+    if db.query(Product).filter(Product.reference == data.reference).first():
         raise HTTPException(
             status_code=409,
-            detail=f"Un produit avec la référence '{data.reference}' existe déjà"
+            detail=f"Un produit avec la référence '{data.reference}' existe déjà",
         )
-    
+
     # Validate foreign keys
     if data.supplier_id and not db.query(Supplier).filter(Supplier.id == data.supplier_id).first():
         raise HTTPException(status_code=404, detail="Fournisseur introuvable")
@@ -73,20 +82,25 @@ def create_product(db: Session, data: ProductCreate) -> Product:
     if data.category_id and not db.query(Category).filter(Category.id == data.category_id).first():
         raise HTTPException(status_code=404, detail="Catégorie introuvable")
 
-    # Extract lots before creating product
     lots_data = data.lots or []
-    
-    # Create product without lots
+
+    # Create product (current_stock defaults to 0)
     product_data = data.model_dump(exclude={"lots"})
     product = Product(**product_data)
     db.add(product)
-    db.flush()  # Get the product ID without committing
-    
-    # Create lots
+    db.flush()  # obtain product.id
+
+    # Create initial lots
     for lot_data in lots_data:
         lot = ProductLot(product_id=product.id, **lot_data.model_dump())
         db.add(lot)
-    
+
+    db.flush()  # lots are now in the session
+
+    # ── Sync current_stock from the lots just created ────────────────────────
+    _sync_stock(db, product)
+    # ────────────────────────────────────────────────────────────────────────
+
     db.commit()
     db.refresh(product)
     return product
@@ -95,22 +109,21 @@ def create_product(db: Session, data: ProductCreate) -> Product:
 def update_product(db: Session, product_id: int, data: ProductUpdate) -> Product:
     product = get_product(db, product_id)
     update_data = data.model_dump(exclude_unset=True)
-    
-    # If reference is being updated, check uniqueness
+
+    # Check reference uniqueness on update
     if "reference" in update_data and update_data["reference"]:
-        existing = db.query(Product).filter(
+        if db.query(Product).filter(
             Product.reference == update_data["reference"],
-            Product.id != product_id
-        ).first()
-        if existing:
+            Product.id != product_id,
+        ).first():
             raise HTTPException(
                 status_code=409,
-                detail=f"Un produit avec la référence '{update_data['reference']}' existe déjà"
+                detail=f"Un produit avec la référence '{update_data['reference']}' existe déjà",
             )
-    
+
     for field, value in update_data.items():
         setattr(product, field, value)
-    
+
     db.commit()
     db.refresh(product)
     return product
@@ -123,9 +136,15 @@ def delete_product(db: Session, product_id: int):
 
 
 def add_lot(db: Session, product_id: int, data: ProductLotCreate) -> ProductLot:
-    get_product(db, product_id)  # validate existence
+    product = get_product(db, product_id)
     lot = ProductLot(product_id=product_id, **data.model_dump())
     db.add(lot)
+    db.flush()
+
+    # ── Sync stock ───────────────────────────────────────────────────────────
+    _sync_stock(db, product)
+    # ────────────────────────────────────────────────────────────────────────
+
     db.commit()
     db.refresh(lot)
     return lot
@@ -136,29 +155,46 @@ def get_lots(db: Session, product_id: int) -> List[ProductLot]:
 
 
 def update_lot(db: Session, product_id: int, lot_id: int, data: ProductLotCreate) -> ProductLot:
-    get_product(db, product_id)  # validate product exists
+    product = get_product(db, product_id)
     lot = db.query(ProductLot).filter(
-        ProductLot.id == lot_id, 
-        ProductLot.product_id == product_id
+        ProductLot.id == lot_id,
+        ProductLot.product_id == product_id,
     ).first()
     if not lot:
         raise HTTPException(status_code=404, detail="Lot introuvable")
+
     lot.lot_number = data.lot_number
     lot.quantity = data.quantity
     lot.expiry_date = data.expiry_date
     lot.notes = data.notes
+
+    db.flush()
+
+    # ── Sync stock ───────────────────────────────────────────────────────────
+    _sync_stock(db, product)
+    # ────────────────────────────────────────────────────────────────────────
+
     db.commit()
     db.refresh(lot)
     return lot
 
 
 def delete_lot(db: Session, product_id: int, lot_id: int):
-    get_product(db, product_id)  # validate product exists
+    product = get_product(db, product_id)
     lot = db.query(ProductLot).filter(
         ProductLot.id == lot_id,
-        ProductLot.product_id == product_id
+        ProductLot.product_id == product_id,
     ).first()
     if not lot:
         raise HTTPException(status_code=404, detail="Lot introuvable")
+
     db.delete(lot)
+    db.flush()
+
+    # ── Sync stock ───────────────────────────────────────────────────────────
+    # After flush the deleted lot is removed; recompute from remaining lots
+    remaining = db.query(ProductLot).filter(ProductLot.product_id == product_id).all()
+    product.current_stock = sum(lot.quantity for lot in remaining)
+    # ────────────────────────────────────────────────────────────────────────
+
     db.commit()
