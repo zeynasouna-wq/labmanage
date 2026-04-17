@@ -1,43 +1,105 @@
 "use client";
 
-import { useState, useEffect, useCallback, createContext, useContext, useRef } from "react";
+import { useState, useEffect, useCallback, createContext, useContext, useRef, ReactNode } from "react";
+
+// ─── Type Definitions ────────────────────────────────────────────────
+interface Product {
+  id: number;
+  code: string;
+  name: string;
+  current_stock: number;
+  minimum_stock: number;
+  alert_stock?: number;
+  supplier_id: number | null;
+  location_id: number | null;
+  category_id: number | null;
+  threshold?: number;
+  stock?: number;
+}
+
+interface ProductLot {
+  id: number;
+  product_id: number;
+  lot_number: string;
+  quantity: number;
+  expiry_date: string | null;
+  notes: string | null;
+}
+
+interface StockMovement {
+  id: number;
+  product_id: number;
+  movement_type: string;
+  quantity: number;
+  stock_before: number;
+  stock_after: number;
+  notes?: string;
+  created_at: string;
+  product?: Product;
+}
+
+interface Supplier {
+  id: number;
+  name: string;
+}
+
+interface Location {
+  id: number;
+  name: string;
+}
+
+interface Category {
+  id: number;
+  name: string;
+}
+
+// ─── FIX : login et logout ajoutés dans AuthContextType ─────────────
+interface AuthContextType {
+  user: { role: string; username: string; name?: string } | null;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => void;
+}
 
 // ─── API Configuration ───────────────────────────────────────────────
-// Mode : défini via la variable NEXT_PUBLIC_API_BASE dans Vercel.
-//   - En local  : laisse vide → http://localhost:8000
-//   - En prod   : NEXT_PUBLIC_API_BASE = https://labmanage.onrender.com
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
 
 // ─── Context ─────────────────────────────────────────────────────────
-const AuthContext = createContext<any>(null);
-const NotifContext = createContext<any>(null);
+const AuthContext = createContext<AuthContextType | null>(null);
+const NotifContext = createContext<((message: string, type?: string) => void) | null>(null);
 
 // ─── API Service Layer ───────────────────────────────────────────────
 const api = {
   token: null as string | null,
-  async request(method: string, path: string, body: any = null) {
+  async request(method: string, path: string, body: Record<string, unknown> | null = null) {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (this.token) headers["Authorization"] = `Bearer ${this.token}`;
     const opts: { method: string; headers: Record<string, string>; body?: string } = { method, headers };
     if (body) opts.body = JSON.stringify(body);
-    const res = await fetch(`${API_BASE}${path}`, opts);
-    if (res.status === 401) {
-      this.token = null;
-      localStorage.removeItem("labostock_token");
-      window.location.reload();
-      throw new Error("Session expirée");
+    try {
+      const res = await fetch(`${API_BASE}${path}`, opts);
+      if (res.status === 401) {
+        this.token = null;
+        localStorage.removeItem("labostock_token");
+        window.location.reload();
+        throw new Error("Session expirée");
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `Erreur ${res.status}`);
+      }
+      if (res.status === 204) return null;
+      return res.json();
+    } catch (error) {
+      if (error instanceof TypeError && error.message === "Failed to fetch") {
+        throw new Error(`Impossible de contacter le serveur (${API_BASE}). Assurez-vous que le backend est en cours d'exécution.`);
+      }
+      throw error;
     }
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || `Erreur ${res.status}`);
-    }
-    if (res.status === 204) return null;
-    return res.json();
   },
   get: (p: string) => api.request("GET", p),
-  post: (p: string, b: any) => api.request("POST", p, b),
-  patch: (p: string, b: any) => api.request("PATCH", p, b),
+  post: (p: string, b: Record<string, unknown>) => api.request("POST", p, b),
+  patch: (p: string, b: Record<string, unknown>) => api.request("PATCH", p, b),
   del: (p: string) => api.request("DELETE", p),
 };
 
@@ -672,20 +734,21 @@ function Modal({ title, onClose, children, footer }: { title: any; onClose: any;
 
 // ─── Login Page ──────────────────────────────────────────────────────
 function LoginPage() {
-  const { login } = useContext(AuthContext);
+  // FIX : on récupère login depuis le contexte correctement typé
+  const auth = useContext(AuthContext)!;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: any) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
-      await login(email, password);
-    } catch (err: any) {
-      setError(err?.message || "Identifiants incorrects");
+      await auth.login(email, password);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Identifiants incorrects");
     }
     setLoading(false);
   };
@@ -727,19 +790,28 @@ function DashboardPage() {
     (async () => {
       try {
         const [products, suppliers, movements] = await Promise.all([
-          api.get("/products/"),
-          api.get("/suppliers/"),
-          api.get("/movements/?skip=0&limit=5"),
+          api.get("/products?page=1&size=100"),
+          api.get("/suppliers?page=1&size=100"),
+          api.get("/movements?page=1&size=5"),
         ]);
         const prodList = products.items || products || [];
         const suppList = suppliers.items || suppliers || [];
         const mvtList = movements.items || movements || [];
-        const lowStock = prodList.filter((p: any) => (p.current_stock ?? p.stock ?? 0) <= (p.minimum_stock ?? p.threshold ?? 10)).length;
+        const lowStock = prodList.filter((p: Product) => (p.current_stock ?? p.stock ?? 0) <= (p.minimum_stock ?? p.threshold ?? 10)).length;
         setStats({ products: prodList.length, suppliers: suppList.length, movements: mvtList.length, lowStock });
         setRecentMvts(mvtList.slice(0, 5));
-      } catch (e: any) { notify("Erreur chargement dashboard", "error"); }
+      } catch (e: unknown) { notify?.("Erreur chargement dashboard", "error"); }
     })();
   }, []);
+
+  const handleDeleteMovement = async (movementId: number) => {
+    if (!confirm("Êtes-vous sûr de vouloir supprimer ce mouvement ?")) return;
+    try {
+      await api.del(`/movements/${movementId}`);
+      notify?.("Mouvement supprimé");
+      setRecentMvts(recentMvts.filter(m => m.id !== movementId));
+    } catch (e: any) { notify?.(e?.message || "Erreur suppression", "error"); }
+  };
 
   if (!stats) return <div className="loading-bar" />;
 
@@ -778,11 +850,12 @@ function DashboardPage() {
               <th>Produit</th>
               <th>Quantité</th>
               <th>Date</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {recentMvts.length === 0 ? (
-              <tr><td colSpan={4}><div className="empty-state"><p>Aucun mouvement récent</p></div></td></tr>
+              <tr><td colSpan={5}><div className="empty-state"><p>Aucun mouvement récent</p></div></td></tr>
             ) : recentMvts.map((m, i) => (
               <tr key={i}>
                 <td>
@@ -795,6 +868,11 @@ function DashboardPage() {
                 <td><span className="badge badge-info">{m.quantity}</span></td>
                 <td style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
                   {m.created_at ? new Date(m.created_at).toLocaleDateString("fr-FR") : "—"}
+                </td>
+                <td>
+                  <div className="action-cell">
+                    <button className="btn-icon" title="Supprimer" onClick={() => handleDeleteMovement(m.id)}>{icons.trash}</button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -810,14 +888,16 @@ function ProductsPage() {
   const [products, setProducts] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState<any>(null); // null | 'create' | 'edit' | 'lots' | 'details'
+  const [modal, setModal] = useState<any>(null);
   const [selected, setSelected] = useState<any>(null);
   const [lots, setLots] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
-  const [form, setForm] = useState<any>({ name: "", reference: "", lot_number: "", description: "", unit: "unité", current_stock: 0, minimum_stock: 0, alert_stock: 0, expiry_date: "", supplier_id: "", location_id: "", category_id: "" });
-  const [lotForm, setLotForm] = useState<any>({ lot_number: "", quantity: 0, expiration_date: "" });
+  const [form, setForm] = useState<any>({ name: "", reference: "", lot_number: "", description: "", unit: "unité", current_stock: "0", minimum_stock: "0", alert_stock: "0", expiry_date: "", supplier_id: "", location_id: "", category_id: "" });
+  const [lotForm, setLotForm] = useState<any>({ lot_number: "", quantity: "", expiry_date: "", notes: "" });
+  const [selectedLot, setSelectedLot] = useState<any>(null);
+  const [lotModalMode, setLotModalMode] = useState<"create" | "edit">("create");
   const notify = useContext(NotifContext);
 
   const load = async () => {
@@ -825,7 +905,7 @@ function ProductsPage() {
       setLoading(true);
       const data = await api.get("/products/");
       setProducts(data.items || data || []);
-    } catch { notify("Erreur chargement produits", "error"); }
+    } catch { notify?.("Erreur chargement produits", "error"); }
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
@@ -837,83 +917,153 @@ function ProductsPage() {
         api.get("/locations/").catch(() => []),
         api.get("/categories/").catch(() => []),
       ]);
-      setSuppliers(suppData.items || suppData || []);
-      setLocations(locData.items || locData || []);
-      setCategories(catData.items || catData || []);
-    } catch (e: any) { console.error("Erreur chargement données associées", e); }
+      const supps = suppData.items || suppData || [];
+      const locs = locData.items || locData || [];
+      const cats = catData.items || catData || [];
+      setSuppliers(supps);
+      setLocations(locs);
+      setCategories(cats);
+      return { supps, locs, cats };
+    } catch (e: unknown) {
+      console.error("Erreur chargement données associées", e);
+      return { supps: [], locs: [], cats: [] };
+    }
   };
 
-  const filtered = products.filter((p: any) =>
-    (p.name + (p.reference || "")).toLowerCase().includes(search.toLowerCase())
+  const filtered = products.filter((p: Product) =>
+    (p.name + (p.code || "")).toLowerCase().includes(search.toLowerCase())
   );
 
-  const openCreate = () => {
-    loadRelatedData();
-    setForm({ name: "", reference: "", lot_number: "", description: "", unit: "unité", current_stock: 0, minimum_stock: 0, alert_stock: 0, expiry_date: "", supplier_id: "", location_id: "", category_id: "" });
+  const openCreate = async () => {
+    await loadRelatedData();
+    setForm({ name: "", reference: "", lot_number: "", description: "", unit: "unité", current_stock: "0", minimum_stock: "0", alert_stock: "0", expiry_date: "", supplier_id: "", location_id: "", category_id: "" });
     setModal("create");
   };
-  const openEdit = (p: any) => {
-    loadRelatedData();
+
+  const openEdit = async (p: Product) => {
     setSelected(p);
-    setForm({ name: p.name, reference: p.reference || "", lot_number: p.lot_number || "", description: p.description || "", unit: p.unit || "unité", current_stock: p.current_stock ?? 0, minimum_stock: p.minimum_stock ?? 0, alert_stock: p.alert_stock ?? 0, expiry_date: p.expiry_date || "", supplier_id: p.supplier_id || "", location_id: p.location_id || "", category_id: p.category_id || "" });
+    await loadRelatedData();
+    setForm({
+      name: p.name || "",
+      reference: (p as any).reference || "",
+      lot_number: (p as any).lot_number || "",
+      description: (p as any).description || "",
+      unit: (p as any).unit || "unité",
+      current_stock: String(p.current_stock ?? 0),
+      minimum_stock: String(p.minimum_stock ?? 0),
+      alert_stock: String(p.alert_stock ?? 0),
+      expiry_date: (p as any).expiry_date || "",
+      supplier_id: p.supplier_id != null ? String(p.supplier_id) : "",
+      location_id: p.location_id != null ? String(p.location_id) : "",
+      category_id: p.category_id != null ? String(p.category_id) : "",
+    });
     setModal("edit");
   };
-  const openDetails = async (p: any) => {
+
+  const openDetails = async (p: Product) => {
     try {
       const data = await api.get(`/products/${p.id}`);
       setSelected(data);
       setModal("details");
-    } catch { notify("Erreur chargement détails", "error"); }
+    } catch { notify?.("Erreur chargement détails", "error"); }
   };
-  const openLots = async (p: any) => {
+
+  const openLots = async (p: Product) => {
     setSelected(p);
     try {
       const data = await api.get(`/products/${p.id}/lots`);
       setLots(data.items || data || []);
     } catch { setLots([]); }
-    setLotForm({ lot_number: "", quantity: 0, expiration_date: "" });
+    setLotForm({ lot_number: "", quantity: "", expiry_date: "", notes: "" });
+    setSelectedLot(null);
+    setLotModalMode("create");
     setModal("lots");
   };
 
   const handleSave = async () => {
     try {
       const payload = {
-        ...form,
-        current_stock: +form.current_stock,
-        minimum_stock: +form.minimum_stock,
-        alert_stock: +form.alert_stock,
-        supplier_id: form.supplier_id ? +form.supplier_id : null,
-        location_id: form.location_id ? +form.location_id : null,
-        category_id: form.category_id ? +form.category_id : null,
+        name: form.name,
+        reference: form.reference,
+        lot_number: form.lot_number,
+        description: form.description,
+        unit: form.unit,
+        current_stock: parseInt(form.current_stock) || 0,
+        minimum_stock: parseInt(form.minimum_stock) || 0,
+        alert_stock: parseInt(form.alert_stock) || 0,
+        supplier_id: form.supplier_id ? parseInt(form.supplier_id) : null,
+        location_id: form.location_id ? parseInt(form.location_id) : null,
+        category_id: form.category_id ? parseInt(form.category_id) : null,
         expiry_date: form.expiry_date || null,
       };
       if (modal === "create") {
         await api.post("/products/", payload);
-        notify("Produit créé");
+        notify?.("Produit créé");
       } else {
         await api.patch(`/products/${selected.id}`, payload);
-        notify("Produit modifié");
+        notify?.("Produit modifié");
       }
       setModal(null);
       load();
-    } catch (e: any) { notify(e?.message || "Erreur", "error"); }
+    } catch (e: unknown) { notify?.(e instanceof Error ? e.message : "Erreur", "error"); }
   };
-  const handleDelete = async (p: any) => {
+
+  const handleDelete = async (p: Product) => {
     if (!confirm(`Archiver "${p.name}" ?`)) return;
     try {
       await api.del(`/products/${p.id}`);
-      notify("Produit archivé");
+      notify?.("Produit archivé");
       load();
-    } catch (e: any) { notify(e?.message || "Erreur", "error"); }
+    } catch (e: unknown) { notify?.(e instanceof Error ? e.message : "Erreur", "error"); }
   };
-  const handleAddLot = async () => {
+
+  const handleEditLot = (lot: ProductLot) => {
+    setSelectedLot(lot);
+    setLotForm({
+      lot_number: lot.lot_number || "",
+      quantity: String(lot.quantity || 0),
+      expiry_date: lot.expiry_date || "",
+      notes: lot.notes || "",
+    });
+    setLotModalMode("edit");
+  };
+
+  const handleSaveLot = async () => {
     try {
-      await api.post(`/products/${selected.id}/lots`, lotForm);
-      notify("Lot ajouté");
+      const quantity = parseInt(lotForm.quantity);
+      if (!quantity || quantity <= 0 || isNaN(quantity)) {
+        notify?.("Veuillez saisir une quantité valide", "error");
+        return;
+      }
+      const payload = {
+        lot_number: lotForm.lot_number,
+        quantity: quantity,
+        expiry_date: lotForm.expiry_date || null,
+        notes: lotForm.notes || null,
+      };
+      if (lotModalMode === "create") {
+        await api.post(`/products/${selected.id}/lots`, payload);
+        notify?.("Lot ajouté");
+      } else {
+        await api.patch(`/products/${selected.id}/lots/${selectedLot.id}`, payload);
+        notify?.("Lot modifié");
+      }
       const data = await api.get(`/products/${selected.id}/lots`);
       setLots(data.items || data || []);
-      setLotForm({ lot_number: "", quantity: 0, expiration_date: "" });
-    } catch (e: any) { notify(e?.message || "Erreur", "error"); }
+      setLotForm({ lot_number: "", quantity: "", expiry_date: "", notes: "" });
+      setSelectedLot(null);
+      setLotModalMode("create");
+    } catch (e: unknown) { notify?.(e instanceof Error ? e.message : "Erreur", "error"); }
+  };
+
+  const handleDeleteLot = async (lotId: number) => {
+    if (!confirm("Êtes-vous sûr de vouloir supprimer ce lot ?")) return;
+    try {
+      await api.del(`/products/${selected.id}/lots/${lotId}`);
+      notify?.("Lot supprimé");
+      const data = await api.get(`/products/${selected.id}/lots`);
+      setLots(data.items || data || []);
+    } catch (e: any) { notify?.(e?.message || "Erreur suppression", "error"); }
   };
 
   return (
@@ -942,14 +1092,14 @@ function ProductsPage() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr><td colSpan={6}><div className="empty-state"><p>Aucun produit trouvé</p></div></td></tr>
-              ) : filtered.map((p: any) => {
+              ) : filtered.map((p: Product) => {
                 const stock = p.current_stock ?? p.stock ?? 0;
                 const low = stock <= (p.minimum_stock ?? 0);
                 return (
                   <tr key={p.id}>
-                    <td><span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{p.reference || "—"}</span></td>
+                    <td><span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{(p as any).reference || "—"}</span></td>
                     <td className="cell-main">{p.name}</td>
-                    <td>{p.unit || "—"}</td>
+                    <td>{(p as any).unit || "—"}</td>
                     <td><span className={`badge ${low ? "badge-danger" : "badge-accent"}`}>{stock}</span></td>
                     <td>{p.minimum_stock ?? "—"}</td>
                     <td>
@@ -1022,21 +1172,27 @@ function ProductsPage() {
               <label className="form-label">Fournisseur</label>
               <select className="form-input form-select" value={form.supplier_id} onChange={(e) => setForm({ ...form, supplier_id: e.target.value })}>
                 <option value="">Aucun</option>
-                {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {suppliers.map((s: Supplier) => (
+                  <option key={s.id} value={String(s.id)}>{s.name}</option>
+                ))}
               </select>
             </div>
             <div className="form-group">
               <label className="form-label">Localisation</label>
               <select className="form-input form-select" value={form.location_id} onChange={(e) => setForm({ ...form, location_id: e.target.value })}>
                 <option value="">Aucune</option>
-                {locations.map((l: any) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                {locations.map((l: Location) => (
+                  <option key={l.id} value={String(l.id)}>{l.name}</option>
+                ))}
               </select>
             </div>
             <div className="form-group">
               <label className="form-label">Catégorie</label>
               <select className="form-input form-select" value={form.category_id} onChange={(e) => setForm({ ...form, category_id: e.target.value })}>
                 <option value="">Aucune</option>
-                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {categories.map((c: Category) => (
+                  <option key={c.id} value={String(c.id)}>{c.name}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -1098,22 +1254,30 @@ function ProductsPage() {
         <Modal title={`Lots — ${selected.name}`} onClose={() => setModal(null)}>
           <table style={{ marginBottom: 16 }}>
             <thead>
-              <tr><th>N° lot</th><th>Quantité</th><th>Expiration</th></tr>
+              <tr><th>N° lot</th><th>Quantité</th><th>Expiration</th><th>Actions</th></tr>
             </thead>
             <tbody>
               {lots.length === 0 ? (
-                <tr><td colSpan={3} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>Aucun lot</td></tr>
+                <tr><td colSpan={4} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>Aucun lot</td></tr>
               ) : lots.map((l, i) => (
                 <tr key={i}>
                   <td style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{l.lot_number || l.number || "—"}</td>
                   <td><span className="badge badge-info">{l.quantity}</span></td>
-                  <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{l.expiration_date ? new Date(l.expiration_date).toLocaleDateString("fr-FR") : "—"}</td>
+                  <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{l.expiry_date || l.expiration_date ? new Date(l.expiry_date || l.expiration_date).toLocaleDateString("fr-FR") : "—"}</td>
+                  <td>
+                    <div className="action-cell">
+                      <button className="btn-icon" title="Modifier" onClick={() => handleEditLot(l)}>{icons.edit}</button>
+                      <button className="btn-icon" title="Supprimer" onClick={() => handleDeleteLot(l.id)}>{icons.trash}</button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
           <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Ajouter un lot</div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
+              {lotModalMode === "create" ? "Ajouter un lot" : "Modifier le lot"}
+            </div>
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">N° lot</label>
@@ -1121,14 +1285,25 @@ function ProductsPage() {
               </div>
               <div className="form-group">
                 <label className="form-label">Quantité</label>
-                <input className="form-input" type="number" value={lotForm.quantity} onChange={(e) => setLotForm({ ...lotForm, quantity: +e.target.value })} />
+                <input className="form-input" type="number" value={lotForm.quantity} onChange={(e) => setLotForm({ ...lotForm, quantity: e.target.value })} />
               </div>
             </div>
             <div className="form-group">
               <label className="form-label">Date d'expiration</label>
-              <input className="form-input" type="date" value={lotForm.expiration_date} onChange={(e) => setLotForm({ ...lotForm, expiration_date: e.target.value })} />
+              <input className="form-input" type="date" value={lotForm.expiry_date} onChange={(e) => setLotForm({ ...lotForm, expiry_date: e.target.value })} />
             </div>
-            <button className="btn btn-primary btn-sm" onClick={handleAddLot}>{icons.plus} Ajouter</button>
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              {lotModalMode === "edit" && (
+                <button className="btn btn-ghost btn-sm" onClick={() => {
+                  setLotModalMode("create");
+                  setSelectedLot(null);
+                  setLotForm({ lot_number: "", quantity: "", expiry_date: "", notes: "" });
+                }}>Annuler</button>
+              )}
+              <button className="btn btn-primary btn-sm" onClick={handleSaveLot}>
+                {lotModalMode === "create" ? (<>{icons.plus} Ajouter</>) : (<>Enregistrer</>)}
+              </button>
+            </div>
           </div>
         </Modal>
       )}
@@ -1144,14 +1319,14 @@ function SuppliersPage() {
   const [modal, setModal] = useState<any>(null);
   const [selected, setSelected] = useState<any>(null);
   const [form, setForm] = useState<any>({ name: "", contact: "", email: "", phone: "", address: "" });
-  const notify = useContext(NotifContext) as any;
+  const notify = useContext(NotifContext);
 
   const load = async () => {
     try {
       setLoading(true);
       const data = await api.get("/suppliers/");
       setSuppliers(data.items || data || []);
-    } catch { notify("Erreur chargement fournisseurs", "error"); }
+    } catch { notify?.("Erreur chargement fournisseurs", "error"); }
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
@@ -1170,19 +1345,19 @@ function SuppliersPage() {
     try {
       if (modal === "create") {
         await api.post("/suppliers/", form);
-        notify("Fournisseur créé");
+        notify?.("Fournisseur créé");
       } else {
         await api.patch(`/suppliers/${selected.id}`, form);
-        notify("Fournisseur modifié");
+        notify?.("Fournisseur modifié");
       }
       setModal(null);
       load();
-    } catch (e: any) { notify(e?.message || "Erreur", "error"); }
+    } catch (e: any) { notify?.(e?.message || "Erreur", "error"); }
   };
   const handleDelete = async (s: any) => {
     if (!confirm(`Supprimer "${s.name}" ?`)) return;
-    try { await api.del(`/suppliers/${s.id}`); notify("Fournisseur supprimé"); load(); }
-    catch (e: any) { notify(e?.message || "Erreur", "error"); }
+    try { await api.del(`/suppliers/${s.id}`); notify?.("Fournisseur supprimé"); load(); }
+    catch (e: any) { notify?.(e?.message || "Erreur", "error"); }
   };
 
   return (
@@ -1267,17 +1442,17 @@ function MovementsPage() {
   const [products, setProducts] = useState<any[]>([]);
   const [searchProduct, setSearchProduct] = useState("");
   const [filteredProducts, setFilteredProducts] = useState<any[]>([]);
-  const [form, setForm] = useState<any>({ product_id: "", movement_type: "entry", quantity: 0, lot_number: "", reason: "", reference_document: "" });
+  const [form, setForm] = useState<any>({ product_id: "", movement_type: "entry", quantity: "", lot_number: "", reason: "", reference_document: "" });
   const notify = useContext(NotifContext);
 
   const load = async (pageNum = 1) => {
     try {
       setLoading(true);
-      const data = await api.get(`/movements/?page=${pageNum}&size=${pageSize}`);
+      const data = await api.get(`/movements?page=${pageNum}&size=${pageSize}`);
       setMovements(data.items || []);
       setTotal(data.total || 0);
       setPage(pageNum);
-    } catch { notify("Erreur chargement mouvements", "error"); }
+    } catch { notify?.("Erreur chargement mouvements", "error"); }
     setLoading(false);
   };
   useEffect(() => { load(1); }, []);
@@ -1289,28 +1464,45 @@ function MovementsPage() {
       setFilteredProducts(data.items || data || []);
     } catch { setProducts([]); setFilteredProducts([]); }
     setSearchProduct("");
-    setForm({ product_id: "", movement_type: "entry", quantity: 0, lot_number: "", reason: "", reference_document: "" });
+    setForm({ product_id: "", movement_type: "entry", quantity: "", lot_number: "", reason: "", reference_document: "" });
     setModal(true);
   };
+
+  const handleDeleteMovement = async (movementId: number) => {
+    if (!confirm("Êtes-vous sûr de vouloir supprimer ce mouvement ?")) return;
+    try {
+      await api.del(`/movements/${movementId}`);
+      notify?.("Mouvement supprimé");
+      load(page);
+    } catch (e: any) { notify?.(e?.message || "Erreur suppression", "error"); }
+  };
+
   const handleSave = async () => {
     try {
-      if (!form.product_id || form.quantity <= 0) {
-        notify("Veuillez remplir tous les champs obligatoires", "error");
+      const quantity = parseInt(form.quantity);
+      if (!form.product_id || !quantity || quantity <= 0 || isNaN(quantity)) {
+        notify?.("Veuillez remplir tous les champs obligatoires (quantité > 0)", "error");
         return;
       }
       const payload = {
         product_id: parseInt(form.product_id),
         movement_type: form.movement_type,
-        quantity: parseInt(String(form.quantity)),
+        quantity: quantity,
         lot_number: form.lot_number || null,
         reason: form.reason || null,
         reference_document: form.reference_document || null,
       };
-      await api.post("/movements/", payload);
-      notify("Mouvement enregistré");
-      setModal(false);
-      load();
-    } catch (e: any) { notify(e?.message || "Erreur", "error"); }
+      const result = await api.post("/movements/", payload);
+      if (result || result === null) {
+        notify?.("Mouvement enregistré", "success");
+        setModal(false);
+        await load();
+      }
+    } catch (e: any) {
+      const errMsg = e?.message || "Erreur lors de l'enregistrement du mouvement";
+      notify?.(errMsg, "error");
+      console.error("Movement save error:", e);
+    }
   };
 
   return (
@@ -1324,10 +1516,10 @@ function MovementsPage() {
         {loading ? <div className="loading-bar" /> : (
           <>
             <table>
-              <thead><tr><th>Type</th><th>Produit</th><th>Quantité</th><th>Utilisateur</th><th>Motif</th><th>Date</th></tr></thead>
+              <thead><tr><th>Type</th><th>Produit</th><th>Quantité</th><th>Utilisateur</th><th>Motif</th><th>Date</th><th>Actions</th></tr></thead>
               <tbody>
                 {movements.length === 0 ? (
-                  <tr><td colSpan={6}><div className="empty-state"><p>Aucun mouvement</p></div></td></tr>
+                  <tr><td colSpan={7}><div className="empty-state"><p>Aucun mouvement</p></div></td></tr>
                 ) : movements.map((m: any, i: number) => {
                   const isIn = m.movement_type === "entry" || m.type === "entry" || m.type === "in" || m.type === "IN";
                   return (
@@ -1344,6 +1536,11 @@ function MovementsPage() {
                       <td style={{ fontSize: 13 }}>{m.reason || "—"}</td>
                       <td style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
                         {m.created_at ? new Date(m.created_at).toLocaleString("fr-FR") : "—"}
+                      </td>
+                      <td>
+                        <div className="action-cell">
+                          <button className="btn-icon" title="Supprimer" onClick={() => handleDeleteMovement(m.id)}>{icons.trash}</button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1381,8 +1578,8 @@ function MovementsPage() {
               value={searchProduct}
               onChange={(e) => {
                 setSearchProduct(e.target.value);
-                const search = e.target.value.toLowerCase();
-                setFilteredProducts(products.filter((p: any) => (p.name + (p.reference || "")).toLowerCase().includes(search)));
+                const s = e.target.value.toLowerCase();
+                setFilteredProducts(products.filter((p: any) => (p.name + (p.reference || "")).toLowerCase().includes(s)));
               }}
             />
             {searchProduct && filteredProducts.length > 0 && (
@@ -1449,7 +1646,7 @@ function UsersPage() {
       setLoading(true);
       const data = await api.get("/users/");
       setUsers(data.items || data || []);
-    } catch { notify("Erreur chargement utilisateurs", "error"); }
+    } catch { notify?.("Erreur chargement utilisateurs", "error"); }
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
@@ -1467,20 +1664,20 @@ function UsersPage() {
     try {
       if (modal === "create") {
         await api.post("/users/", form);
-        notify("Utilisateur créé");
+        notify?.("Utilisateur créé");
       } else {
         const updatePayload = { name: form.name, role: form.role };
         await api.patch(`/users/${selected.id}`, updatePayload);
-        notify("Utilisateur modifié");
+        notify?.("Utilisateur modifié");
       }
       setModal(null);
       load();
-    } catch (e: any) { notify(e?.message || "Erreur", "error"); }
+    } catch (e: any) { notify?.(e?.message || "Erreur", "error"); }
   };
   const handleDelete = async (u: any) => {
     if (!confirm(`Désactiver "${u.name}" ?`)) return;
-    try { await api.del(`/users/${u.id}`); notify("Utilisateur désactivé"); load(); }
-    catch (e: any) { notify(e?.message || "Erreur", "error"); }
+    try { await api.del(`/users/${u.id}`); notify?.("Utilisateur désactivé"); load(); }
+    catch (e: any) { notify?.(e?.message || "Erreur", "error"); }
   };
 
   const roleLabel = (r: any) => {
@@ -1578,7 +1775,7 @@ function CategoriesPage() {
       setLoading(true);
       const data = await api.get("/categories/");
       setCategories(data || []);
-    } catch { notify("Erreur chargement catégories", "error"); }
+    } catch { notify?.("Erreur chargement catégories", "error"); }
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
@@ -1589,22 +1786,32 @@ function CategoriesPage() {
     try {
       if (modal === "create") {
         await api.post("/categories/", form);
-        notify("Catégorie créée");
+        notify?.("Catégorie créée");
       } else {
         await api.patch(`/categories/${selected.id}`, form);
-        notify("Catégorie modifiée");
+        notify?.("Catégorie modifiée");
       }
       setModal(null);
       load();
-    } catch (e: any) { notify(e?.message || "Erreur", "error"); }
+    } catch (e: any) { notify?.(e?.message || "Erreur", "error"); }
   };
+
   const handleDelete = async (c: any) => {
     if (!confirm(`Supprimer "${c.name}" ?`)) return;
     try {
+      const productsData = await api.get(`/products/?category_id=${c.id}&page=1&size=1`).catch(() => null);
+      const linkedCount = productsData?.total ?? (productsData?.items?.length ?? 0);
+      if (linkedCount > 0) {
+        notify?.(
+          `Impossible de supprimer "${c.name}" : ${linkedCount} produit(s) y sont associés. Désassociez-les d'abord.`,
+          "error"
+        );
+        return;
+      }
       await api.del(`/categories/${c.id}`);
-      notify("Catégorie supprimée");
+      notify?.("Catégorie supprimée");
       load();
-    } catch (e: any) { notify(e?.message || "Erreur", "error"); }
+    } catch (e: any) { notify?.(e?.message || "Erreur", "error"); }
   };
 
   return (
@@ -1689,7 +1896,7 @@ function LocationsPage() {
       setLoading(true);
       const data = await api.get("/locations/");
       setLocations(data || []);
-    } catch { notify("Erreur chargement localisations", "error"); }
+    } catch { notify?.("Erreur chargement localisations", "error"); }
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
@@ -1700,22 +1907,32 @@ function LocationsPage() {
     try {
       if (modal === "create") {
         await api.post("/locations/", form);
-        notify("Localisation créée");
+        notify?.("Localisation créée");
       } else {
         await api.patch(`/locations/${selected.id}`, form);
-        notify("Localisation modifiée");
+        notify?.("Localisation modifiée");
       }
       setModal(null);
       load();
-    } catch (e: any) { notify(e?.message || "Erreur", "error"); }
+    } catch (e: any) { notify?.(e?.message || "Erreur", "error"); }
   };
+
   const handleDelete = async (l: any) => {
     if (!confirm(`Supprimer "${l.name}" ?`)) return;
     try {
+      const productsData = await api.get(`/products/?location_id=${l.id}&page=1&size=1`).catch(() => null);
+      const linkedCount = productsData?.total ?? (productsData?.items?.length ?? 0);
+      if (linkedCount > 0) {
+        notify?.(
+          `Impossible de supprimer "${l.name}" : ${linkedCount} produit(s) y sont stockés. Déplacez-les d'abord.`,
+          "error"
+        );
+        return;
+      }
       await api.del(`/locations/${l.id}`);
-      notify("Localisation supprimée");
+      notify?.("Localisation supprimée");
       load();
-    } catch (e: any) { notify(e?.message || "Erreur", "error"); }
+    } catch (e: any) { notify?.(e?.message || "Erreur", "error"); }
   };
 
   return (
@@ -1798,7 +2015,7 @@ const NAV = [
   { key: "users", label: "Utilisateurs", icon: icons.users },
 ];
 
-const PAGE_META = {
+const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   dashboard: { title: "Tableau de bord", subtitle: "Vue d'ensemble du laboratoire" },
   products: { title: "Produits", subtitle: "Gestion des réactifs, consommables et équipements" },
   suppliers: { title: "Fournisseurs", subtitle: "Annuaire des fournisseurs" },
@@ -1812,7 +2029,7 @@ const PAGE_META = {
 function ExportButton({ token }: { token: string }) {
   const [showMenu, setShowMenu] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
-  const { showNotif } = useContext(NotifContext);
+  const notify = useContext(NotifContext);
 
   const exportOptions = [
     { key: "all", label: "📦 Tous les enregistrements (ZIP)", icon: "⬇️" },
@@ -1833,11 +2050,7 @@ function ExportButton({ token }: { token: string }) {
       const response = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
-
-      if (!response.ok) {
-        throw new Error("Erreur lors de l'export");
-      }
-
+      if (!response.ok) throw new Error("Erreur lors de l'export");
       const blob = await response.blob();
       const downloadUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -1847,19 +2060,10 @@ function ExportButton({ token }: { token: string }) {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(downloadUrl);
-
-      showNotif?.({
-        type: "success",
-        title: "Export réussi",
-        message: `Téléchargement de ${endpoint} effectué`,
-      });
+      notify?.(`Export "${endpoint}" téléchargé`, "success");
       setShowMenu(false);
     } catch (error) {
-      showNotif?.({
-        type: "error",
-        title: "Erreur d'export",
-        message: error instanceof Error ? error.message : "Erreur inconnue",
-      });
+      notify?.(error instanceof Error ? error.message : "Erreur d'export", "error");
     } finally {
       setLoading(null);
     }
@@ -1878,93 +2082,36 @@ function ExportButton({ token }: { token: string }) {
       </button>
 
       {showMenu && (
-        <div
-          style={{
-            position: "absolute",
-            top: "100%",
-            right: 0,
-            marginTop: "8px",
-            backgroundColor: "var(--bg-secondary)",
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius-lg)",
-            boxShadow: "var(--shadow)",
-            zIndex: 1000,
-            minWidth: "280px",
-            overflow: "hidden",
-          }}
-        >
+        <div style={{ position: "absolute", top: "100%", right: 0, marginTop: "8px", backgroundColor: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: "var(--radius-lg)", boxShadow: "var(--shadow)", zIndex: 1000, minWidth: "280px", overflow: "hidden" }}>
           <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", backgroundColor: "var(--bg-tertiary)" }}>
-            <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-              Télécharger les données
-            </div>
+            <div style={{ fontSize: "12px", fontWeight: "600", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Télécharger les données</div>
           </div>
-
           <div style={{ maxHeight: "400px", overflowY: "auto" }}>
             {exportOptions.map((opt) => (
               <button
                 key={opt.key}
                 onClick={() => download(opt.key)}
                 disabled={loading !== null}
-                style={{
-                  width: "100%",
-                  padding: "12px 16px",
-                  border: "none",
-                  backgroundColor: "transparent",
-                  color: loading === opt.key ? "var(--accent)" : "var(--text-primary)",
-                  cursor: loading ? "not-allowed" : "pointer",
-                  fontSize: "13px",
-                  textAlign: "left",
-                  transition: "all 0.15s ease",
-                  borderBottom: "1px solid var(--border)",
-                  opacity: loading && loading !== opt.key ? 0.5 : 1,
-                }}
-                onMouseEnter={(e) => {
-                  if (!loading)
-                    (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--bg-hover)";
-                }}
-                onMouseLeave={(e) => {
-                  if (!loading)
-                    (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent";
-                }}
+                style={{ width: "100%", padding: "12px 16px", border: "none", backgroundColor: "transparent", color: loading === opt.key ? "var(--accent)" : "var(--text-primary)", cursor: loading ? "not-allowed" : "pointer", fontSize: "13px", textAlign: "left", transition: "all 0.15s ease", borderBottom: "1px solid var(--border)", opacity: loading && loading !== opt.key ? 0.5 : 1 }}
+                onMouseEnter={(e) => { if (!loading) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "var(--bg-hover)"; }}
+                onMouseLeave={(e) => { if (!loading) (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent"; }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  {loading === opt.key && (
-                    <span
-                      style={{
-                        display: "inline-block",
-                        width: "4px",
-                        height: "4px",
-                        borderRadius: "50%",
-                        backgroundColor: "var(--accent)",
-                        animation: "pulse 1s infinite",
-                      }}
-                    />
-                  )}
-                  {opt.label}
-                </div>
+                {opt.label}
               </button>
             ))}
           </div>
-
           <div style={{ padding: "8px 16px", backgroundColor: "var(--bg-tertiary)", borderTop: "1px solid var(--border)", fontSize: "11px", color: "var(--text-muted)" }}>
             Format CSV (ZIP pour tous les enregistrements)
           </div>
         </div>
       )}
-
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 0.5; }
-          50% { opacity: 1; }
-        }
-      `}</style>
     </div>
   );
 }
 
-function AppShell({ user, onLogout }: { user: any; onLogout: any }) {
+function AppShell({ user, onLogout }: { user: any; onLogout: () => void }) {
   const [page, setPage] = useState("dashboard");
-  const meta = (PAGE_META as any)[page];
+  const meta = PAGE_META[page];
 
   return (
     <div className="lab-app">
@@ -2027,35 +2174,41 @@ export default function App() {
     const token = localStorage.getItem("labostock_token");
     if (token) {
       api.token = token;
-      api.get("/auth/me").then((u: any) => { setUser(u); setReady(true); }).catch(() => { api.token = null; localStorage.removeItem("labostock_token"); setReady(true); });
+      api.get("/auth/me")
+        .then((u: any) => { setUser(u); setReady(true); })
+        .catch(() => { api.token = null; localStorage.removeItem("labostock_token"); setReady(true); });
     } else {
       setReady(true);
     }
   }, []);
 
-  const login = async (email: any, password: any) => {
+  const login = async (email: string, password: string): Promise<void> => {
     const data = await api.post("/auth/login", { email, password });
     api.token = data.access_token || data.token;
     localStorage.setItem("labostock_token", api.token || "");
     const me = await api.get("/auth/me");
     setUser(me);
   };
+
   const logout = () => {
     api.token = null;
     localStorage.removeItem("labostock_token");
     setUser(null);
   };
 
-  if (!ready) return <div className="lab-app" style={{ alignItems: "center", justifyContent: "center" }}><div className="loading-bar" style={{ width: 200 }} /></div>;
+  if (!ready) return (
+    <div className="lab-app" style={{ alignItems: "center", justifyContent: "center" }}>
+      <div className="loading-bar" style={{ width: 200 }} />
+    </div>
+  );
 
   return (
+    // FIX : on passe login et logout dans la valeur du contexte
     <AuthContext.Provider value={{ user, login, logout }}>
-      <NotifContext.Provider value={() => {}}>
+      <NotifProvider>
         <style>{CSS}</style>
-        <NotifProvider>
-          {user ? <AppShell user={user} onLogout={logout} /> : <LoginPage />}
-        </NotifProvider>
-      </NotifContext.Provider>
+        {user ? <AppShell user={user} onLogout={logout} /> : <LoginPage />}
+      </NotifProvider>
     </AuthContext.Provider>
   );
 }

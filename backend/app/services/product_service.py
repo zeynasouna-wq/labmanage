@@ -100,3 +100,32 @@ def add_lot(db: Session, product_id: int, data: ProductLotCreate) -> ProductLot:
 
 def get_lots(db: Session, product_id: int) -> List[ProductLot]:
     return db.query(ProductLot).filter(ProductLot.product_id == product_id).all()
+
+
+def update_lot(db: Session, product_id: int, lot_id: int, data: ProductLotCreate) -> ProductLot:
+    get_product(db, product_id)  # validate product exists
+    lot = db.query(ProductLot).filter(
+        ProductLot.id == lot_id, 
+        ProductLot.product_id == product_id
+    ).first()
+    if not lot:
+        raise HTTPException(status_code=404, detail="Lot introuvable")
+    lot.lot_number = data.lot_number
+    lot.quantity = data.quantity
+    lot.expiry_date = data.expiry_date
+    lot.notes = data.notes
+    db.commit()
+    db.refresh(lot)
+    return lot
+
+
+def delete_lot(db: Session, product_id: int, lot_id: int):
+    get_product(db, product_id)  # validate product exists
+    lot = db.query(ProductLot).filter(
+        ProductLot.id == lot_id,
+        ProductLot.product_id == product_id
+    ).first()
+    if not lot:
+        raise HTTPException(status_code=404, detail="Lot introuvable")
+    db.delete(lot)
+    db.commit()
