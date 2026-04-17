@@ -968,48 +968,68 @@ function ProductsPage() {
   // Le bouton de lots appelle directement openEdit(p)
 
   const handleSave = async () => {
-    try {
-      if (!form.reference || !form.reference.trim()) {
-        notify?.("La référence du produit est obligatoire", "error");
-        return;
-      }
-      if (!form.name || !form.name.trim()) {
-        notify?.("Le nom du produit est obligatoire", "error");
-        return;
-      }
+  try {
+    if (!form.reference || !form.reference.trim()) {
+      notify?.("La référence du produit est obligatoire", "error");
+      return;
+    }
+    if (!form.name || !form.name.trim()) {
+      notify?.("Le nom du produit est obligatoire", "error");
+      return;
+    }
 
-      const payload: any = {
-        name: form.name,
-        reference: form.reference,
-        description: form.description,
-        minimum_stock: parseInt(form.minimum_stock) || 0,
-        alert_stock: parseInt(form.alert_stock) || 0,
-        supplier_id: form.supplier_id ? parseInt(form.supplier_id) : null,
-        location_id: form.location_id ? parseInt(form.location_id) : null,
-        category_id: form.category_id ? parseInt(form.category_id) : null,
-      };
+    const payload: any = {
+      name: form.name,
+      reference: form.reference,
+      description: form.description,
+      minimum_stock: parseInt(form.minimum_stock) || 0,
+      alert_stock: parseInt(form.alert_stock) || 0,
+      supplier_id: form.supplier_id ? parseInt(form.supplier_id) : null,
+      location_id: form.location_id ? parseInt(form.location_id) : null,
+      category_id: form.category_id ? parseInt(form.category_id) : null,
+    };
 
-      // Add new lots only (those without ID)
-      if (modal === "create") {
-        payload.lots = (form.lots || []).map((lot: any) => ({
-          lot_number: lot.lot_number,
-          quantity: parseInt(lot.quantity) || 0,
-          expiry_date: lot.expiry_date || null,
-          notes: lot.notes || null,
-        }));
-      }
+    if (modal === "create") {
+      // En création : on envoie tous les lots dans le payload
+      payload.lots = (form.lots || []).map((lot: any) => ({
+        lot_number: lot.lot_number,
+        quantity: parseInt(lot.quantity) || 0,
+        expiry_date: lot.expiry_date || null,
+        notes: lot.notes || null,
+      }));
+      await api.post("/products/", payload);
+      notify?.("Produit créé");
+    } else {
+  // 1. PATCH infos produit
+  await api.patch(`/products/${selected.id}`, payload);
 
-      if (modal === "create") {
-        await api.post("/products/", payload);
-        notify?.("Produit créé");
-      } else {
-        await api.patch(`/products/${selected.id}`, payload);
-        notify?.("Produit modifié");
-      }
-      setModal(null);
-      load();
-    } catch (e: unknown) { notify?.(e instanceof Error ? e.message : "Erreur", "error"); }
-  };
+  // 2. Supprimer les lots retirés (existaient en DB mais absents du form actuel)
+  const currentLotIds = new Set((form.lots || []).filter((l: any) => l.id).map((l: any) => l.id));
+  const originalLots = (selected as any).lots || [];
+  for (const lot of originalLots) {
+    if (!currentLotIds.has(lot.id)) {
+      await api.del(`/products/${selected.id}/lots/${lot.id}`);
+    }
+  }
+
+  // 3. Ajouter les nouveaux lots (sans id)
+  const newLots = (form.lots || []).filter((lot: any) => !lot.id);
+  for (const lot of newLots) {
+    await api.post(`/products/${selected.id}/lots`, {
+      lot_number: lot.lot_number,
+      quantity: parseInt(lot.quantity) || 0,
+      expiry_date: lot.expiry_date || null,
+      notes: lot.notes || null,
+    });
+  }
+
+  notify?.("Produit modifié");
+}
+
+    setModal(null);
+    load();
+  } catch (e: unknown) { notify?.(e instanceof Error ? e.message : "Erreur", "error"); }
+};
 
   const handleDelete = async (p: Product) => {
     if (!confirm(`Archiver "${p.name}" ?`)) return;
