@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: str = os.getenv(
         "CORS_ORIGINS",
-        "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,https://labmanage.vercel.app"
+        "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,https://labmanage-sojy.onrender.com,https://labmanage.vercel.app,https://labmanage.onrender.com"
     )
     
     @property
