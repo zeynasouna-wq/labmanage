@@ -105,10 +105,18 @@ class Product(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False, index=True)
-    reference = Column(String(100), unique=True, nullable=False, index=True)  # Référence UNIQUE
+    reference = Column(String(100), unique=True, nullable=False, index=True)
     description = Column(Text, nullable=True)
 
-    # Stock - calculé à partir des lots
+    # ─── IMPORTANT ────────────────────────────────────────────────────────────
+    # current_stock est une vraie colonne en base (NOT NULL, default=0).
+    # Elle est mise à jour explicitement par product_service à chaque mouvement
+    # de stock (entry / exit / adjustment / loss).
+    # Ne pas la supprimer ni la transformer en @property : PostgreSQL sur Render
+    # impose la contrainte NOT NULL sur cette colonne.
+    current_stock = Column(Integer, default=0, nullable=False)
+    # ──────────────────────────────────────────────────────────────────────────
+
     minimum_stock = Column(Integer, default=0, nullable=False)
     alert_stock = Column(Integer, default=0, nullable=False)
 
@@ -131,10 +139,13 @@ class Product(Base):
     alerts = relationship("Alert", back_populates="product", cascade="all, delete-orphan")
     lots = relationship("ProductLot", back_populates="product", cascade="all, delete-orphan")
 
-    @property
-    def current_stock(self) -> int:
-        """Stock total = somme des stocks de tous les lots"""
-        return sum(lot.quantity for lot in self.lots)
+    def sync_stock_from_lots(self) -> None:
+        """
+        Recalcule current_stock à partir des lots et met à jour la colonne.
+        À appeler après tout ajout / modification / suppression de lot,
+        puis db.commit().
+        """
+        self.current_stock = sum(lot.quantity for lot in self.lots)
 
 
 class ProductLot(Base):
@@ -167,7 +178,7 @@ class StockMovement(Base):
     stock_after = Column(Integer, nullable=False)
 
     reason = Column(Text, nullable=True)
-    reference_document = Column(String(200), nullable=True)  # bon de commande, etc.
+    reference_document = Column(String(200), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
