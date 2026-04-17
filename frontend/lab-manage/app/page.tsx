@@ -1401,7 +1401,8 @@ function MovementsPage() {
   const [products, setProducts] = useState<any[]>([]);
   const [searchProduct, setSearchProduct] = useState("");
   const [filteredProducts, setFilteredProducts] = useState<any[]>([]);
-  const [form, setForm] = useState<any>({ product_id: "", movement_type: "entry", quantity: "", lot_number: "", reason: "", reference_document: "" });
+  const [form, setForm] = useState<any>({ product_id: "", movement_type: "entry", quantity: "", lot_id: "", reason: "", reference_document: "" });
+  const [productLots, setProductLots] = useState<any[]>([]);
   const notify = useContext(NotifContext);
 
   const load = async (pageNum = 1) => {
@@ -1423,7 +1424,8 @@ function MovementsPage() {
       setFilteredProducts(data.items || data || []);
     } catch { setProducts([]); setFilteredProducts([]); }
     setSearchProduct("");
-    setForm({ product_id: "", movement_type: "entry", quantity: "", lot_number: "", reason: "", reference_document: "" });
+    setProductLots([]);
+    setForm({ product_id: "", movement_type: "entry", quantity: "", lot_id: "", reason: "", reference_document: "" });
     setModal(true);
   };
 
@@ -1443,11 +1445,15 @@ function MovementsPage() {
         notify?.("Veuillez remplir tous les champs obligatoires (quantité > 0)", "error");
         return;
       }
+      if (!form.lot_id) {
+        notify?.("Veuillez sélectionner un lot", "error");
+        return;
+      }
       const payload = {
         product_id: parseInt(form.product_id),
+        lot_id: parseInt(form.lot_id),
         movement_type: form.movement_type,
         quantity: quantity,
-        lot_number: form.lot_number || null,
         reason: form.reason || null,
         reference_document: form.reference_document || null,
       };
@@ -1546,7 +1552,15 @@ function MovementsPage() {
                 {filteredProducts.map((p: any) => (
                   <div
                     key={p.id}
-                    onClick={() => { setForm({ ...form, product_id: p.id }); setSearchProduct(p.name); setFilteredProducts([]); }}
+                    onClick={async () => {
+                      setForm({ ...form, product_id: p.id, lot_id: "" });
+                      setSearchProduct(p.name);
+                      setFilteredProducts([]);
+                      try {
+                        const d = await api.get(`/products/${p.id}`);
+                        setProductLots(d.lots || []);
+                      } catch { setProductLots([]); }
+                    }}
                     style={{ padding: "10px 12px", cursor: "pointer", borderBottom: "1px solid var(--border)", fontSize: 13 }}
                     onMouseEnter={(e: any) => e.target.style.background = "var(--bg-hover)"}
                     onMouseLeave={(e: any) => e.target.style.background = "transparent"}
@@ -1574,8 +1588,15 @@ function MovementsPage() {
             </div>
           </div>
           <div className="form-group">
-            <label className="form-label">N° lot</label>
-            <input className="form-input" value={form.lot_number} onChange={(e) => setForm({ ...form, lot_number: e.target.value })} placeholder="Optionnel" />
+            <label className="form-label">Lot *</label>
+            <select className="form-input form-select" value={form.lot_id} onChange={(e) => setForm({ ...form, lot_id: e.target.value })} disabled={!form.product_id}>
+              <option value="">{form.product_id ? "Sélectionner un lot" : "Choisir un produit d'abord"}</option>
+              {productLots.map((lot: any) => (
+                <option key={lot.id} value={lot.id}>
+                  {lot.lot_number} — Stock: {lot.quantity}{lot.expiry_date ? ` | Exp: ${lot.expiry_date}` : ""}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="form-group">
             <label className="form-label">Motif</label>
