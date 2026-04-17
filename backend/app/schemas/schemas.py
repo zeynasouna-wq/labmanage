@@ -273,7 +273,7 @@ class StockMovementCreate(BaseModel):
 class StockMovementResponse(BaseModel):
     id: int
     product_id: int
-    lot_id: int
+    lot_id: Optional[int] = None
     product_name: Optional[str] = None
     lot_number: Optional[str] = None
     user_id: int

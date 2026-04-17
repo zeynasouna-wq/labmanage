@@ -10,6 +10,8 @@ services:
         fromDatabase:
           name: labmanage-db
           property: connectionString
+      - key: ENVIRONMENT
+        value: "production"
       - key: DEBUG
         value: "false"
       - key: CORS_ORIGINS
