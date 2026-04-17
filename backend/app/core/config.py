@@ -9,21 +9,29 @@ import os
 
 
 class Settings(BaseSettings):
-    """Application Settings"""
     
-    # Environment
-    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "local")  # "local" or "production"
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "local")
     
-    # Application
     APP_NAME: str = "LaboStock"
     APP_VERSION: str = "1.0.0"
-    DEBUG: bool = ENVIRONMENT == "local"
     
-    # Database
-    DATABASE_URL: str = os.getenv(
-        "DATABASE_URL",
-        "sqlite:///./labmanage.db"
-    )
+    @property
+    def DEBUG(self) -> bool:
+        return self.ENVIRONMENT == "local"
+    
+    # Database - SQLite en local, PostgreSQL en prod
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./labmanage.db")
+    
+    @property
+    def database_url_fixed(self) -> str:
+        """
+        Render fournit parfois 'postgres://' mais SQLAlchemy
+        exige 'postgresql://' → on corrige automatiquement
+        """
+        url = self.DATABASE_URL
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        return url
     
     # API Configuration
     API_HOST: str = os.getenv("API_HOST", "0.0.0.0")
@@ -51,7 +59,7 @@ class Settings(BaseSettings):
     
     # Admin Configuration
     FIRST_ADMIN_NAME: str = os.getenv("FIRST_ADMIN_NAME", "Administrator")
-    FIRST_ADMIN_EMAIL: str = os.getenv("FIRST_ADMIN_EMAIL", "admin@labomanage.local")
+    FIRST_ADMIN_EMAIL: str = os.getenv("FIRST_ADMIN_EMAIL", "admin@labo.sn")
     FIRST_ADMIN_PASSWORD: str = os.getenv("FIRST_ADMIN_PASSWORD", "Admin@2024!")
     
     class Config:

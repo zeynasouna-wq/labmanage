@@ -5,10 +5,11 @@ FastAPI Main Application
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.db.session import engine, Base
+from app.db.session import engine, Base, DATABASE_URL
 from app.core.config import settings
 from app.routers import suppliers
 from app.routers import auth, movements, products, users, categories, locations, export
+import logging
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -59,6 +60,12 @@ def health_check():
         "status": "healthy",
         "database": "connected",
     }
+    
+logger = logging.getLogger(__name__)
+
+@app.on_event("startup")
+async def startup():
+    logger.info(f"Database URL: {DATABASE_URL[:30]}...")  # affiche juste le début
 
 
 if __name__ == "__main__":
