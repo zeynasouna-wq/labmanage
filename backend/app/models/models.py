@@ -105,18 +105,14 @@ class Product(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False, index=True)
-    reference = Column(String(100), nullable=True, index=True)
-    lot_number = Column(String(200), nullable=True)
+    reference = Column(String(100), unique=True, nullable=False, index=True)  # Référence UNIQUE
     description = Column(Text, nullable=True)
 
-    # Stock
-    current_stock = Column(Integer, default=0, nullable=False)
+    # Stock - calculé à partir des lots
     minimum_stock = Column(Integer, default=0, nullable=False)
     alert_stock = Column(Integer, default=0, nullable=False)
-    unit = Column(String(50), default="unité")
 
     # Dates
-    expiry_date = Column(Date, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -135,6 +131,11 @@ class Product(Base):
     alerts = relationship("Alert", back_populates="product", cascade="all, delete-orphan")
     lots = relationship("ProductLot", back_populates="product", cascade="all, delete-orphan")
 
+    @property
+    def current_stock(self) -> int:
+        """Stock total = somme des stocks de tous les lots"""
+        return sum(lot.quantity for lot in self.lots)
+
 
 class ProductLot(Base):
     """Gestion multi-lots par produit"""
@@ -149,6 +150,7 @@ class ProductLot(Base):
     notes = Column(Text, nullable=True)
 
     product = relationship("Product", back_populates="lots")
+    movements = relationship("StockMovement", back_populates="lot", cascade="all, delete-orphan")
 
 
 class StockMovement(Base):
@@ -156,6 +158,7 @@ class StockMovement(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    lot_id = Column(Integer, ForeignKey("product_lots.id"), nullable=False)  # OBLIGATOIRE
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     movement_type = Column(SAEnum(MovementType), nullable=False)
@@ -163,13 +166,13 @@ class StockMovement(Base):
     stock_before = Column(Integer, nullable=False)
     stock_after = Column(Integer, nullable=False)
 
-    lot_number = Column(String(200), nullable=True)
     reason = Column(Text, nullable=True)
     reference_document = Column(String(200), nullable=True)  # bon de commande, etc.
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     product = relationship("Product", back_populates="movements")
+    lot = relationship("ProductLot", back_populates="movements")
     user = relationship("User", back_populates="movements", foreign_keys=[user_id])
 
 
