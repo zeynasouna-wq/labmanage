@@ -141,9 +141,8 @@ def add_lot(db: Session, product_id: int, data: ProductLotCreate) -> ProductLot:
     db.add(lot)
     db.flush()
 
-    # ── Sync stock ───────────────────────────────────────────────────────────
+    db.refresh(product)   # ← recharge product.lots depuis la DB
     _sync_stock(db, product)
-    # ────────────────────────────────────────────────────────────────────────
 
     db.commit()
     db.refresh(lot)
@@ -170,9 +169,8 @@ def update_lot(db: Session, product_id: int, lot_id: int, data: ProductLotCreate
 
     db.flush()
 
-    # ── Sync stock ───────────────────────────────────────────────────────────
+    db.refresh(product)   # ← même fix
     _sync_stock(db, product)
-    # ────────────────────────────────────────────────────────────────────────
 
     db.commit()
     db.refresh(lot)
@@ -191,10 +189,7 @@ def delete_lot(db: Session, product_id: int, lot_id: int):
     db.delete(lot)
     db.flush()
 
-    # ── Sync stock ───────────────────────────────────────────────────────────
-    # After flush the deleted lot is removed; recompute from remaining lots
-    remaining = db.query(ProductLot).filter(ProductLot.product_id == product_id).all()
-    product.current_stock = sum(lot.quantity for lot in remaining)
-    # ────────────────────────────────────────────────────────────────────────
+    db.refresh(product)       # ← recharge product.lots depuis la DB
+    _sync_stock(db, product)  # ← même fonction que partout ailleurs
 
     db.commit()
