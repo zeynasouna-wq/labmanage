@@ -77,6 +77,7 @@ def get_movements(
     query = db.query(StockMovement).options(
         joinedload(StockMovement.product),
         joinedload(StockMovement.user),
+        joinedload(StockMovement.lot),
     )
 
     if product_id:
@@ -97,6 +98,7 @@ def get_movement(db: Session, movement_id: int) -> StockMovement:
     movement = db.query(StockMovement).options(
         joinedload(StockMovement.product),
         joinedload(StockMovement.user),
+        joinedload(StockMovement.lot),
     ).filter(StockMovement.id == movement_id).first()
     if not movement:
         raise HTTPException(status_code=404, detail="Mouvement introuvable")
