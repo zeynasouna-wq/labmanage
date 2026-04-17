@@ -10,6 +10,16 @@ from app.core.config import settings
 from app.routers import suppliers
 from app.routers import auth, movements, products, users, categories, locations, export
 import logging
+# Créer l'admin au démarrage si il n'existe pas
+from app.db.session import SessionLocal
+from app.models.models import User
+from app.core.security import get_password_hash
+from app.models.models import UserRole, UserStatus
+
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -61,12 +71,35 @@ def health_check():
         "database": "connected",
     }
     
-logger = logging.getLogger(__name__)
 
 @app.on_event("startup")
 async def startup():
-    logger.info(f"Database URL: {DATABASE_URL[:30]}...")  # affiche juste le début
+    logging.basicConfig(level=logging.INFO)
+    logger.info(f"==> DATABASE: {DATABASE_URL[:20]}...")
+    
 
+    db = SessionLocal()
+    try:
+        admin = db.query(User).filter(User.email == settings.FIRST_ADMIN_EMAIL).first()
+        if not admin:
+            admin_user = User(
+                name=settings.FIRST_ADMIN_NAME,
+                email=settings.FIRST_ADMIN_EMAIL,
+                hashed_password=get_password_hash(settings.FIRST_ADMIN_PASSWORD),
+                role=UserRole.admin,
+                status=UserStatus.active,
+                is_active=True,
+            )
+            db.add(admin_user)
+            db.commit()
+            logger.info(f"==> Admin créé : {settings.FIRST_ADMIN_EMAIL}")
+        else:
+            logger.info(f"==> Admin existe déjà : {admin.email}")
+    except Exception as e:
+        logger.error(f"==> Erreur création admin : {e}")
+        db.rollback()
+    finally:
+        db.close()
 
 if __name__ == "__main__":
     import uvicorn
