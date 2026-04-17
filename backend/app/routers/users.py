@@ -13,7 +13,7 @@ router = APIRouter(prefix="/users", tags=["Utilisateurs"])
 @router.get("/", response_model=list[UserResponse], summary="Lister les utilisateurs")
 def list_users(
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, le=200),
+    limit: int = Query(1000, le=10000),
     db: Session = Depends(get_db),
     _: User = Depends(require_admin),
 ):

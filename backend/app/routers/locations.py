@@ -11,7 +11,7 @@ router = APIRouter(prefix="/locations", tags=["Localisations"])
 @router.get("/", response_model=list[LocationResponse], summary="Lister les localisations")
 def list_locations(
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, le=500),
+    limit: int = Query(10000, le=50000),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
