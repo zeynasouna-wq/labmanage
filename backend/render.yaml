@@ -13,7 +13,7 @@ services:
       - key: DEBUG
         value: "false"
       - key: CORS_ORIGINS
-        value: "http://localhost:3000,http://localhost:8080,https://labmanage.onrender.com,https://labmanage-ag53.vercel.app"
+        value: "http://localhost:3000,http://localhost:8080,https://labmanage.onrender.com,https://labmanage.vercel.app"
 
 databases:
   - name: labmanage-db

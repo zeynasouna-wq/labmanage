@@ -790,9 +790,9 @@ function DashboardPage() {
     (async () => {
       try {
         const [products, suppliers, movements] = await Promise.all([
-          api.get("/products?page=1&size=100"),
-          api.get("/suppliers?page=1&size=100"),
-          api.get("/movements?page=1&size=5"),
+          api.get("/products/?page=1&size=100"),
+          api.get("/suppliers/?page=1&size=100"),
+          api.get("/movements/?page=1&size=5"),
         ]);
         const prodList = products.items || products || [];
         const suppList = suppliers.items || suppliers || [];
@@ -1407,7 +1407,7 @@ function MovementsPage() {
   const load = async (pageNum = 1) => {
     try {
       setLoading(true);
-      const data = await api.get(`/movements?page=${pageNum}&size=${pageSize}`);
+      const data = await api.get(`/movements/?page=${pageNum}&size=${pageSize}`);
       setMovements(data.items || []);
       setTotal(data.total || 0);
       setPage(pageNum);
