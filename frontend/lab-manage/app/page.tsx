@@ -913,8 +913,8 @@ function ProductsPage() {
     try {
       const [suppData, locData, catData] = await Promise.all([
         api.get("/suppliers/?size=10000&page=1").catch(() => []),
-        api.get("/locations/?limit=10000").catch(() => []),
-        api.get("/categories/?limit=10000").catch(() => []),
+        api.get("/locations/?skip=0&limit=10000").catch(() => []),
+        api.get("/categories/?skip=0&limit=10000").catch(() => []),
       ]);
       const supps = suppData.items || suppData || [];
       const locs = locData.items || locData || [];
