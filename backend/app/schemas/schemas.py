@@ -156,6 +156,13 @@ class ProductLotCreate(BaseModel):
     expiry_date: Optional[date] = None
     notes: Optional[str] = None
 
+    @field_validator("quantity")
+    @classmethod
+    def quantity_positive(cls, v):
+        if v <= 0:
+            raise ValueError("La quantité du lot doit être positive")
+        return v
+
 
 class ProductLotResponse(BaseModel):
     id: int
@@ -173,29 +180,37 @@ class ProductLotResponse(BaseModel):
 
 class ProductCreate(BaseModel):
     name: str
-    reference: Optional[str] = None
-    lot_number: Optional[str] = None
+    reference: str  # OBLIGATOIRE et UNIQUE
     description: Optional[str] = None
-    current_stock: int = 0
     minimum_stock: int = 0
     alert_stock: int = 0
-    unit: str = "unité"
-    expiry_date: Optional[date] = None
     supplier_id: Optional[int] = None
     location_id: Optional[int] = None
     category_id: Optional[int] = None
+    # Lots - optionnel, peuvent être ajoutés après
+    lots: List[ProductLotCreate] = []
+
+    @field_validator("reference")
+    @classmethod
+    def reference_not_empty(cls, v):
+        if not v or not v.strip():
+            raise ValueError("La référence du produit est obligatoire")
+        return v.strip()
+
+    @field_validator("name")
+    @classmethod
+    def name_not_empty(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Le nom du produit est obligatoire")
+        return v.strip()
 
 
 class ProductUpdate(BaseModel):
     name: Optional[str] = None
     reference: Optional[str] = None
-    lot_number: Optional[str] = None
     description: Optional[str] = None
-    current_stock: Optional[int] = None
     minimum_stock: Optional[int] = None
     alert_stock: Optional[int] = None
-    unit: Optional[str] = None
-    expiry_date: Optional[date] = None
     supplier_id: Optional[int] = None
     location_id: Optional[int] = None
     category_id: Optional[int] = None
@@ -205,14 +220,11 @@ class ProductUpdate(BaseModel):
 class ProductResponse(BaseModel):
     id: int
     name: str
-    reference: Optional[str] = None
-    lot_number: Optional[str] = None
+    reference: str  # Toujours présent
     description: Optional[str] = None
-    current_stock: int
+    current_stock: int  # Calculé à partir des lots
     minimum_stock: int
     alert_stock: int
-    unit: str
-    expiry_date: Optional[date] = None
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -228,12 +240,10 @@ class ProductSummary(BaseModel):
     """Lightweight product for lists"""
     id: int
     name: str
-    reference: Optional[str] = None
+    reference: str
     current_stock: int
     minimum_stock: int
     alert_stock: int
-    unit: str
-    expiry_date: Optional[date] = None
     is_active: bool
     supplier_name: Optional[str] = None
     location_name: Optional[str] = None
@@ -246,9 +256,9 @@ class ProductSummary(BaseModel):
 
 class StockMovementCreate(BaseModel):
     product_id: int
+    lot_id: int  # OBLIGATOIRE - Le lot concerné
     movement_type: MovementType
     quantity: int
-    lot_number: Optional[str] = None
     reason: Optional[str] = None
     reference_document: Optional[str] = None
 
@@ -263,14 +273,15 @@ class StockMovementCreate(BaseModel):
 class StockMovementResponse(BaseModel):
     id: int
     product_id: int
+    lot_id: int
     product_name: Optional[str] = None
+    lot_number: Optional[str] = None
     user_id: int
     user_name: Optional[str] = None
     movement_type: MovementType
     quantity: int
     stock_before: int
     stock_after: int
-    lot_number: Optional[str] = None
     reason: Optional[str] = None
     reference_document: Optional[str] = None
     created_at: datetime

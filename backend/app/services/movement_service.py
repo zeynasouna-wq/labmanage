@@ -3,26 +3,35 @@ from datetime import datetime, date, timedelta
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_
 from fastapi import HTTPException
-from app.models.models import StockMovement, Product, MovementType, Alert, AlertType, AlertStatus, User
+from app.models.models import StockMovement, Product, ProductLot, MovementType, Alert, AlertType, AlertStatus, User
 from app.schemas.schemas import StockMovementCreate
 from app.core.config import settings
 
 
 def create_movement(db: Session, data: StockMovementCreate, user: User) -> StockMovement:
+    # Validate product exists
     product = db.query(Product).filter(Product.id == data.product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Produit introuvable")
 
-    stock_before = product.current_stock
+    # Validate lot exists and belongs to product
+    lot = db.query(ProductLot).filter(
+        ProductLot.id == data.lot_id,
+        ProductLot.product_id == data.product_id
+    ).first()
+    if not lot:
+        raise HTTPException(status_code=404, detail="Lot introuvable pour ce produit")
 
-    # Apply movement
+    stock_before = lot.quantity
+
+    # Apply movement to the specific lot
     if data.movement_type in (MovementType.entry,):
         stock_after = stock_before + data.quantity
     elif data.movement_type in (MovementType.exit, MovementType.loss):
         if data.quantity > stock_before:
             raise HTTPException(
                 status_code=400,
-                detail=f"Stock insuffisant. Disponible: {stock_before}, Demandé: {data.quantity}",
+                detail=f"Stock insuffisant dans ce lot. Disponible: {stock_before}, Demandé: {data.quantity}",
             )
         stock_after = stock_before - data.quantity
     elif data.movement_type == MovementType.adjustment:
@@ -34,19 +43,19 @@ def create_movement(db: Session, data: StockMovementCreate, user: User) -> Stock
     # Record movement
     movement = StockMovement(
         product_id=data.product_id,
+        lot_id=data.lot_id,
         user_id=user.id,
         movement_type=data.movement_type,
         quantity=data.quantity,
         stock_before=stock_before,
         stock_after=stock_after,
-        lot_number=data.lot_number,
         reason=data.reason,
         reference_document=data.reference_document,
     )
     db.add(movement)
 
-    # Update product stock
-    product.current_stock = stock_after
+    # Update lot stock
+    lot.quantity = stock_after
     db.commit()
     db.refresh(movement)
 
@@ -98,18 +107,21 @@ def delete_movement(db: Session, movement_id: int):
     """Delete a movement and revert stock changes"""
     movement = get_movement(db, movement_id)
     product = movement.product
+    lot = movement.lot
 
     if not product:
         raise HTTPException(status_code=404, detail="Produit associé introuvable")
+    if not lot:
+        raise HTTPException(status_code=404, detail="Lot associé introuvable")
 
-    # Revert stock changes
+    # Revert stock changes in the lot
     if movement.movement_type == MovementType.entry:
-        product.current_stock -= movement.quantity
+        lot.quantity -= movement.quantity
     elif movement.movement_type in (MovementType.exit, MovementType.loss):
-        product.current_stock += movement.quantity
+        lot.quantity += movement.quantity
     elif movement.movement_type == MovementType.adjustment:
         # Reverse adjustment: restore previous stock
-        product.current_stock = movement.stock_before
+        lot.quantity = movement.stock_before
 
     db.delete(movement)
     db.commit()
@@ -121,31 +133,31 @@ def delete_movement(db: Session, movement_id: int):
 def _check_and_create_alerts(db: Session, product: Product):
     """Check product stock levels and expiry, create or resolve alerts."""
     today = date.today()
-    # Fallback to 30 days if EXPIRY_ALERT_DAYS_BEFORE is not defined in settings
     expiry_warning_days = getattr(settings, "EXPIRY_ALERT_DAYS_BEFORE", 30)
 
     # ── Out of stock ──
     if product.current_stock == 0:
         _upsert_alert(db, product.id, AlertType.out_of_stock,
-                      f"Rupture de stock: {product.name} (stock=0)")
+                      f"Rupture de stock: {product.name} (stock total=0)")
     else:
         _resolve_alert(db, product.id, AlertType.out_of_stock)
 
     # ── Low stock ──
     if product.alert_stock > 0 and 0 < product.current_stock <= product.alert_stock:
         _upsert_alert(db, product.id, AlertType.low_stock,
-                      f"Stock faible: {product.name} ({product.current_stock} {product.unit} ≤ seuil {product.alert_stock})")
+                      f"Stock faible: {product.name} ({product.current_stock} ≤ seuil {product.alert_stock})")
     elif product.current_stock > product.alert_stock:
         _resolve_alert(db, product.id, AlertType.low_stock)
 
-    # ── Expiry ──
-    if product.expiry_date:
-        if product.expiry_date <= today:
-            _upsert_alert(db, product.id, AlertType.expired,
-                          f"Produit périmé: {product.name} (péremption: {product.expiry_date})")
-        elif product.expiry_date <= today + timedelta(days=expiry_warning_days):
-            _upsert_alert(db, product.id, AlertType.expiry_soon,
-                          f"Péremption imminente: {product.name} dans {(product.expiry_date - today).days} jours ({product.expiry_date})")
+    # ── Expiry ──  Check each lot for expiry
+    for lot in product.lots:
+        if lot.expiry_date:
+            if lot.expiry_date <= today:
+                _upsert_alert(db, product.id, AlertType.expired,
+                              f"Lot périmé: {product.name} - Lot {lot.lot_number} (péremption: {lot.expiry_date})")
+            elif lot.expiry_date <= today + timedelta(days=expiry_warning_days):
+                _upsert_alert(db, product.id, AlertType.expiry_soon,
+                              f"Péremption imminente: {product.name} - Lot {lot.lot_number} dans {(lot.expiry_date - today).days} jours ({lot.expiry_date})")
 
 
 def _upsert_alert(db: Session, product_id: int, alert_type: AlertType, message: str):

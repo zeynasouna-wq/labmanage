@@ -890,11 +890,10 @@ function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<any>(null);
   const [selected, setSelected] = useState<any>(null);
-  const [lots, setLots] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
-  const [form, setForm] = useState<any>({ name: "", reference: "", lot_number: "", description: "", unit: "unité", current_stock: "0", minimum_stock: "0", alert_stock: "0", expiry_date: "", supplier_id: "", location_id: "", category_id: "" });
+  const [form, setForm] = useState<any>({ name: "", reference: "", description: "", minimum_stock: "0", alert_stock: "0", supplier_id: "", location_id: "", category_id: "", lots: [] });
   const [lotForm, setLotForm] = useState<any>({ lot_number: "", quantity: "", expiry_date: "", notes: "" });
   const [selectedLot, setSelectedLot] = useState<any>(null);
   const [lotModalMode, setLotModalMode] = useState<"create" | "edit">("create");
@@ -936,7 +935,7 @@ function ProductsPage() {
 
   const openCreate = async () => {
     await loadRelatedData();
-    setForm({ name: "", reference: "", lot_number: "", description: "", unit: "unité", current_stock: "0", minimum_stock: "0", alert_stock: "0", expiry_date: "", supplier_id: "", location_id: "", category_id: "" });
+    setForm({ name: "", reference: "", description: "", minimum_stock: "0", alert_stock: "0", supplier_id: "", location_id: "", category_id: "", lots: [] });
     setModal("create");
   };
 
@@ -946,16 +945,13 @@ function ProductsPage() {
     setForm({
       name: p.name || "",
       reference: (p as any).reference || "",
-      lot_number: (p as any).lot_number || "",
       description: (p as any).description || "",
-      unit: (p as any).unit || "unité",
-      current_stock: String(p.current_stock ?? 0),
       minimum_stock: String(p.minimum_stock ?? 0),
       alert_stock: String(p.alert_stock ?? 0),
-      expiry_date: (p as any).expiry_date || "",
       supplier_id: p.supplier_id != null ? String(p.supplier_id) : "",
       location_id: p.location_id != null ? String(p.location_id) : "",
       category_id: p.category_id != null ? String(p.category_id) : "",
+      lots: (p as any).lots || [],
     });
     setModal("edit");
   };
@@ -968,34 +964,41 @@ function ProductsPage() {
     } catch { notify?.("Erreur chargement détails", "error"); }
   };
 
-  const openLots = async (p: Product) => {
-    setSelected(p);
-    try {
-      const data = await api.get(`/products/${p.id}/lots`);
-      setLots(data.items || data || []);
-    } catch { setLots([]); }
-    setLotForm({ lot_number: "", quantity: "", expiry_date: "", notes: "" });
-    setSelectedLot(null);
-    setLotModalMode("create");
-    setModal("lots");
-  };
+  // openLots est maintenant remplacé par openEdit qui gère aussi les lots
+  // Le bouton de lots appelle directement openEdit(p)
 
   const handleSave = async () => {
     try {
-      const payload = {
+      if (!form.reference || !form.reference.trim()) {
+        notify?.("La référence du produit est obligatoire", "error");
+        return;
+      }
+      if (!form.name || !form.name.trim()) {
+        notify?.("Le nom du produit est obligatoire", "error");
+        return;
+      }
+
+      const payload: any = {
         name: form.name,
         reference: form.reference,
-        lot_number: form.lot_number,
         description: form.description,
-        unit: form.unit,
-        current_stock: parseInt(form.current_stock) || 0,
         minimum_stock: parseInt(form.minimum_stock) || 0,
         alert_stock: parseInt(form.alert_stock) || 0,
         supplier_id: form.supplier_id ? parseInt(form.supplier_id) : null,
         location_id: form.location_id ? parseInt(form.location_id) : null,
         category_id: form.category_id ? parseInt(form.category_id) : null,
-        expiry_date: form.expiry_date || null,
       };
+
+      // Add new lots only (those without ID)
+      if (modal === "create") {
+        payload.lots = (form.lots || []).map((lot: any) => ({
+          lot_number: lot.lot_number,
+          quantity: parseInt(lot.quantity) || 0,
+          expiry_date: lot.expiry_date || null,
+          notes: lot.notes || null,
+        }));
+      }
+
       if (modal === "create") {
         await api.post("/products/", payload);
         notify?.("Produit créé");
@@ -1017,54 +1020,24 @@ function ProductsPage() {
     } catch (e: unknown) { notify?.(e instanceof Error ? e.message : "Erreur", "error"); }
   };
 
-  const handleEditLot = (lot: ProductLot) => {
-    setSelectedLot(lot);
-    setLotForm({
-      lot_number: lot.lot_number || "",
-      quantity: String(lot.quantity || 0),
-      expiry_date: lot.expiry_date || "",
-      notes: lot.notes || "",
-    });
-    setLotModalMode("edit");
+  const addLotToForm = () => {
+    const newLot = {
+      lot_number: lotForm.lot_number,
+      quantity: parseInt(lotForm.quantity) || 0,
+      expiry_date: lotForm.expiry_date || null,
+      notes: lotForm.notes || null,
+    };
+    setForm({ ...form, lots: [...(form.lots || []), newLot] });
+    setLotForm({ lot_number: "", quantity: "", expiry_date: "", notes: "" });
+    setLotModalMode("create");
   };
 
-  const handleSaveLot = async () => {
-    try {
-      const quantity = parseInt(lotForm.quantity);
-      if (!quantity || quantity <= 0 || isNaN(quantity)) {
-        notify?.("Veuillez saisir une quantité valide", "error");
-        return;
-      }
-      const payload = {
-        lot_number: lotForm.lot_number,
-        quantity: quantity,
-        expiry_date: lotForm.expiry_date || null,
-        notes: lotForm.notes || null,
-      };
-      if (lotModalMode === "create") {
-        await api.post(`/products/${selected.id}/lots`, payload);
-        notify?.("Lot ajouté");
-      } else {
-        await api.patch(`/products/${selected.id}/lots/${selectedLot.id}`, payload);
-        notify?.("Lot modifié");
-      }
-      const data = await api.get(`/products/${selected.id}/lots`);
-      setLots(data.items || data || []);
-      setLotForm({ lot_number: "", quantity: "", expiry_date: "", notes: "" });
-      setSelectedLot(null);
-      setLotModalMode("create");
-    } catch (e: unknown) { notify?.(e instanceof Error ? e.message : "Erreur", "error"); }
+  const removeLotFromForm = (index: number) => {
+    setForm({ ...form, lots: (form.lots || []).filter((_: any, i: number) => i !== index) });
   };
 
-  const handleDeleteLot = async (lotId: number) => {
-    if (!confirm("Êtes-vous sûr de vouloir supprimer ce lot ?")) return;
-    try {
-      await api.del(`/products/${selected.id}/lots/${lotId}`);
-      notify?.("Lot supprimé");
-      const data = await api.get(`/products/${selected.id}/lots`);
-      setLots(data.items || data || []);
-    } catch (e: any) { notify?.(e?.message || "Erreur suppression", "error"); }
-  };
+  // Les lots sont maintenant gérés lors de la création/édition du produit via addLotToForm et removeLotFromForm
+  // Les fonctions handleSaveLot, handleDeleteLot, handleEditLot ne sont plus utilisées
 
   return (
     <>
@@ -1083,9 +1056,9 @@ function ProductsPage() {
               <tr>
                 <th>Référence</th>
                 <th>Nom</th>
-                <th>Unité</th>
-                <th>Stock</th>
+                <th>Stock Total</th>
                 <th>Seuil min</th>
+                <th>Lots</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -1093,19 +1066,20 @@ function ProductsPage() {
               {filtered.length === 0 ? (
                 <tr><td colSpan={6}><div className="empty-state"><p>Aucun produit trouvé</p></div></td></tr>
               ) : filtered.map((p: Product) => {
-                const stock = p.current_stock ?? p.stock ?? 0;
+                const stock = p.current_stock ?? 0;
                 const low = stock <= (p.minimum_stock ?? 0);
+                const lotCount = (p as any).lots?.length ?? 0;
                 return (
                   <tr key={p.id}>
                     <td><span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{(p as any).reference || "—"}</span></td>
                     <td className="cell-main">{p.name}</td>
-                    <td>{(p as any).unit || "—"}</td>
                     <td><span className={`badge ${low ? "badge-danger" : "badge-accent"}`}>{stock}</span></td>
                     <td>{p.minimum_stock ?? "—"}</td>
+                    <td><span className="badge badge-muted">{lotCount}</span></td>
                     <td>
                       <div className="action-cell">
                         <button className="btn-icon" title="Détails" onClick={() => openDetails(p)}>ℹ</button>
-                        <button className="btn-icon" title="Lots" onClick={() => openLots(p)}>{icons.lot}</button>
+                        <button className="btn-icon" title="Lots" onClick={() => openEdit(p)}>{icons.lot}</button>
                         <button className="btn-icon" title="Modifier" onClick={() => openEdit(p)}>{icons.edit}</button>
                         <button className="btn-icon" title="Archiver" onClick={() => handleDelete(p)}>{icons.trash}</button>
                       </div>
@@ -1131,8 +1105,8 @@ function ProductsPage() {
               <input className="form-input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div className="form-group">
-              <label className="form-label">Référence</label>
-              <input className="form-input" value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} />
+              <label className="form-label">Référence * (unique)</label>
+              <input className="form-input" value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} placeholder="REF-001" />
             </div>
           </div>
           <div className="form-group">
@@ -1140,24 +1114,6 @@ function ProductsPage() {
             <input className="form-input" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
           </div>
           <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Unité</label>
-              <input className="form-input" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="mL, g, unité…" />
-            </div>
-            <div className="form-group">
-              <label className="form-label">N° lot</label>
-              <input className="form-input" value={form.lot_number} onChange={(e) => setForm({ ...form, lot_number: e.target.value })} />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Date d'expiration</label>
-              <input className="form-input" type="date" value={form.expiry_date} onChange={(e) => setForm({ ...form, expiry_date: e.target.value })} />
-            </div>
-          </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Stock actuel</label>
-              <input className="form-input" type="number" value={form.current_stock} onChange={(e) => setForm({ ...form, current_stock: +e.target.value })} />
-            </div>
             <div className="form-group">
               <label className="form-label">Seuil minimum</label>
               <input className="form-input" type="number" value={form.minimum_stock} onChange={(e) => setForm({ ...form, minimum_stock: +e.target.value })} />
@@ -1196,6 +1152,78 @@ function ProductsPage() {
               </select>
             </div>
           </div>
+
+          {/* Gestion des lots */}
+          <div style={{ marginTop: 24, borderTop: "1px solid var(--border)", paddingTop: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <h4 style={{ fontSize: 14, fontWeight: 600 }}>Lots</h4>
+              <button className="btn btn-primary btn-sm" onClick={() => setLotModalMode("create")}>Ajouter un lot</button>
+            </div>
+
+            {/* Formulaire d'ajout/édition de lot */}
+            {lotModalMode === "create" && (
+              <div style={{ background: "var(--bg-tertiary)", padding: 12, borderRadius: "var(--radius)", marginBottom: 12 }}>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">N° lot*</label>
+                    <input className="form-input" placeholder="LOT-001" value={lotForm.lot_number} onChange={(e) => setLotForm({ ...lotForm, lot_number: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Quantité*</label>
+                    <input className="form-input" type="number" min="0" placeholder="10" value={lotForm.quantity} onChange={(e) => setLotForm({ ...lotForm, quantity: e.target.value })} />
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Date d'expiration</label>
+                    <input className="form-input" type="date" value={lotForm.expiry_date} onChange={(e) => setLotForm({ ...lotForm, expiry_date: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Notes</label>
+                    <input className="form-input" placeholder="Commentaires…" value={lotForm.notes} onChange={(e) => setLotForm({ ...lotForm, notes: e.target.value })} />
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => { setLotModalMode("create"); setLotForm({ lot_number: "", quantity: "", expiry_date: "", notes: "" }); }}>Annuler</button>
+                  <button className="btn btn-primary btn-sm" onClick={addLotToForm}>Ajouter</button>
+                </div>
+              </div>
+            )}
+
+            {/* Liste des lots */}
+            {form.lots && form.lots.length > 0 ? (
+              <div style={{ marginTop: 12 }}>
+                <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                      <th style={{ padding: "8px", textAlign: "left", color: "var(--text-muted)", fontWeight: 600 }}>N° Lot</th>
+                      <th style={{ padding: "8px", textAlign: "left", color: "var(--text-muted)", fontWeight: 600 }}>Qty</th>
+                      <th style={{ padding: "8px", textAlign: "left", color: "var(--text-muted)", fontWeight: 600 }}>Expiration</th>
+                      <th style={{ padding: "8px", textAlign: "center", color: "var(--text-muted)", fontWeight: 600 }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {form.lots.map((lot: any, idx: number) => (
+                      <tr key={idx} style={{ borderBottom: "1px solid var(--border)" }}>
+                        <td style={{ padding: "8px", color: "var(--text-primary)" }}>{lot.lot_number}</td>
+                        <td style={{ padding: "8px", color: "var(--text-primary)" }}>{lot.quantity}</td>
+                        <td style={{ padding: "8px", color: "var(--text-muted)", fontSize: 12 }}>{lot.expiry_date || "—"}</td>
+                        <td style={{ padding: "8px", textAlign: "center" }}>
+                          <button className="btn-icon" onClick={() => removeLotFromForm(idx)}>
+                            {icons.trash}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ textAlign: "center", padding: "20px", color: "var(--text-muted)", fontSize: 13 }}>
+                Aucun lot. Ajoutez un lot pour démarrer →
+              </div>
+            )}
+          </div>
         </Modal>
       )}
 
@@ -1207,15 +1235,7 @@ function ProductsPage() {
               <div style={{ fontSize: 15, fontWeight: 500, color: "var(--text-primary)", fontFamily: "var(--font-mono)" }}>{selected.reference || "—"}</div>
             </div>
             <div>
-              <label style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.8px" }}>N° Lot</label>
-              <div style={{ fontSize: 15, fontWeight: 500, color: "var(--text-primary)", fontFamily: "var(--font-mono)" }}>{selected.lot_number || "—"}</div>
-            </div>
-            <div>
-              <label style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.8px" }}>Unité</label>
-              <div style={{ fontSize: 15, fontWeight: 500, color: "var(--text-primary)" }}>{selected.unit || "—"}</div>
-            </div>
-            <div>
-              <label style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.8px" }}>Stock Actuel</label>
+              <label style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.8px" }}>Stock Total</label>
               <div style={{ fontSize: 15, fontWeight: 500, color: "var(--text-primary)" }}>{selected.current_stock ?? 0}</div>
             </div>
             <div>
@@ -1225,10 +1245,6 @@ function ProductsPage() {
             <div>
               <label style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.8px" }}>Seuil Alerte</label>
               <div style={{ fontSize: 15, fontWeight: 500, color: "var(--text-primary)" }}>{selected.alert_stock ?? 0}</div>
-            </div>
-            <div>
-              <label style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.8px" }}>Date Expiration</label>
-              <div style={{ fontSize: 15, fontWeight: 500, color: "var(--text-primary)" }}>{selected.expiry_date ? new Date(selected.expiry_date).toLocaleDateString("fr-FR") : "—"}</div>
             </div>
             <div>
               <label style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.8px" }}>Fournisseur</label>
@@ -1250,63 +1266,6 @@ function ProductsPage() {
         </Modal>
       )}
 
-      {modal === "lots" && selected && (
-        <Modal title={`Lots — ${selected.name}`} onClose={() => setModal(null)}>
-          <table style={{ marginBottom: 16 }}>
-            <thead>
-              <tr><th>N° lot</th><th>Quantité</th><th>Expiration</th><th>Actions</th></tr>
-            </thead>
-            <tbody>
-              {lots.length === 0 ? (
-                <tr><td colSpan={4} style={{ textAlign: "center", padding: 20, color: "var(--text-muted)" }}>Aucun lot</td></tr>
-              ) : lots.map((l, i) => (
-                <tr key={i}>
-                  <td style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{l.lot_number || l.number || "—"}</td>
-                  <td><span className="badge badge-info">{l.quantity}</span></td>
-                  <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{l.expiry_date || l.expiration_date ? new Date(l.expiry_date || l.expiration_date).toLocaleDateString("fr-FR") : "—"}</td>
-                  <td>
-                    <div className="action-cell">
-                      <button className="btn-icon" title="Modifier" onClick={() => handleEditLot(l)}>{icons.edit}</button>
-                      <button className="btn-icon" title="Supprimer" onClick={() => handleDeleteLot(l.id)}>{icons.trash}</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>
-              {lotModalMode === "create" ? "Ajouter un lot" : "Modifier le lot"}
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">N° lot</label>
-                <input className="form-input" value={lotForm.lot_number} onChange={(e) => setLotForm({ ...lotForm, lot_number: e.target.value })} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Quantité</label>
-                <input className="form-input" type="number" value={lotForm.quantity} onChange={(e) => setLotForm({ ...lotForm, quantity: e.target.value })} />
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Date d'expiration</label>
-              <input className="form-input" type="date" value={lotForm.expiry_date} onChange={(e) => setLotForm({ ...lotForm, expiry_date: e.target.value })} />
-            </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-              {lotModalMode === "edit" && (
-                <button className="btn btn-ghost btn-sm" onClick={() => {
-                  setLotModalMode("create");
-                  setSelectedLot(null);
-                  setLotForm({ lot_number: "", quantity: "", expiry_date: "", notes: "" });
-                }}>Annuler</button>
-              )}
-              <button className="btn btn-primary btn-sm" onClick={handleSaveLot}>
-                {lotModalMode === "create" ? (<>{icons.plus} Ajouter</>) : (<>Enregistrer</>)}
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
     </>
   );
 }
