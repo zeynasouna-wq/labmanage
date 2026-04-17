@@ -903,7 +903,7 @@ function ProductsPage() {
   const load = async () => {
     try {
       setLoading(true);
-      const data = await api.get("/products/");
+      const data = await api.get("/products/?size=10000&page=1");
       setProducts(data.items || data || []);
     } catch { notify?.("Erreur chargement produits", "error"); }
     setLoading(false);
@@ -913,9 +913,9 @@ function ProductsPage() {
   const loadRelatedData = async () => {
     try {
       const [suppData, locData, catData] = await Promise.all([
-        api.get("/suppliers/").catch(() => []),
-        api.get("/locations/").catch(() => []),
-        api.get("/categories/").catch(() => []),
+        api.get("/suppliers/?size=10000&page=1").catch(() => []),
+        api.get("/locations/?limit=10000").catch(() => []),
+        api.get("/categories/?limit=10000").catch(() => []),
       ]);
       const supps = suppData.items || suppData || [];
       const locs = locData.items || locData || [];

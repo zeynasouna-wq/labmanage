@@ -56,7 +56,7 @@ def delete_movement(
 @router.get("/", response_model=PaginatedResponse, summary="Historique des mouvements")
 def list_movements(
     page: int = Query(1, ge=1),
-    size: int = Query(30, ge=1, le=200),
+    size: int = Query(1000, ge=1, le=10000),
     product_id: Optional[int] = None,
     movement_type: Optional[MovementType] = None,
     date_from: Optional[date] = None,
