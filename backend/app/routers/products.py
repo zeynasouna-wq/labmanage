@@ -97,3 +97,24 @@ def add_lot(
     _: User = Depends(require_technician_or_admin),
 ):
     return product_service.add_lot(db, product_id, data)
+
+
+@router.patch("/{product_id}/lots/{lot_id}", response_model=ProductLotResponse, summary="Modifier un lot")
+def update_lot(
+    product_id: int,
+    lot_id: int,
+    data: ProductLotCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_technician_or_admin),
+):
+    return product_service.update_lot(db, product_id, lot_id, data)
+
+
+@router.delete("/{product_id}/lots/{lot_id}", status_code=204, summary="Supprimer un lot")
+def delete_lot(
+    product_id: int,
+    lot_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_technician_or_admin),
+):
+    product_service.delete_lot(db, product_id, lot_id)

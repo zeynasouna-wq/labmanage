@@ -33,6 +33,26 @@ def create_movement(
     return resp
 
 
+@router.get("/{movement_id}", response_model=StockMovementResponse, summary="Détail mouvement")
+def get_movement(
+    movement_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Récupérer les détails d'un mouvement"""
+    return movement_service.get_movement(db, movement_id)
+
+
+@router.delete("/{movement_id}", status_code=204, summary="Supprimer un mouvement")
+def delete_movement(
+    movement_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_technician_or_admin),
+):
+    """Supprimer un mouvement"""
+    movement_service.delete_movement(db, movement_id)
+
+
 @router.get("/", response_model=PaginatedResponse, summary="Historique des mouvements")
 def list_movements(
     page: int = Query(1, ge=1),

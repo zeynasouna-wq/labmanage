@@ -84,10 +84,45 @@ def get_movements(
     return items, total
 
 
+def get_movement(db: Session, movement_id: int) -> StockMovement:
+    movement = db.query(StockMovement).options(
+        joinedload(StockMovement.product),
+        joinedload(StockMovement.user),
+    ).filter(StockMovement.id == movement_id).first()
+    if not movement:
+        raise HTTPException(status_code=404, detail="Mouvement introuvable")
+    return movement
+
+
+def delete_movement(db: Session, movement_id: int):
+    """Delete a movement and revert stock changes"""
+    movement = get_movement(db, movement_id)
+    product = movement.product
+
+    if not product:
+        raise HTTPException(status_code=404, detail="Produit associé introuvable")
+
+    # Revert stock changes
+    if movement.movement_type == MovementType.entry:
+        product.current_stock -= movement.quantity
+    elif movement.movement_type in (MovementType.exit, MovementType.loss):
+        product.current_stock += movement.quantity
+    elif movement.movement_type == MovementType.adjustment:
+        # Reverse adjustment: restore previous stock
+        product.current_stock = movement.stock_before
+
+    db.delete(movement)
+    db.commit()
+
+    # Trigger alert checks
+    _check_and_create_alerts(db, product)
+
+
 def _check_and_create_alerts(db: Session, product: Product):
     """Check product stock levels and expiry, create or resolve alerts."""
     today = date.today()
-    expiry_warning_days = settings.EXPIRY_ALERT_DAYS_BEFORE
+    # Fallback to 30 days if EXPIRY_ALERT_DAYS_BEFORE is not defined in settings
+    expiry_warning_days = getattr(settings, "EXPIRY_ALERT_DAYS_BEFORE", 30)
 
     # ── Out of stock ──
     if product.current_stock == 0:

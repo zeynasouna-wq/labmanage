@@ -191,6 +191,7 @@ class ProductUpdate(BaseModel):
     reference: Optional[str] = None
     lot_number: Optional[str] = None
     description: Optional[str] = None
+    current_stock: Optional[int] = None
     minimum_stock: Optional[int] = None
     alert_stock: Optional[int] = None
     unit: Optional[str] = None
