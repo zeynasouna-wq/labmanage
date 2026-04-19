@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.models import User, Location
-from app.core.dependencies import get_current_user, require_technician_or_admin, require_admin
+from app.core.dependencies import get_current_user, require_admin
+from app.core.permissions import PermissionChecker, PermissionDenied
 from app.schemas.schemas import LocationCreate, LocationUpdate, LocationResponse
 
 router = APIRouter(prefix="/locations", tags=["Localisations"])
@@ -13,9 +14,12 @@ def list_locations(
     skip: int = Query(0, ge=0),
     limit: int = Query(10000, le=50000),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    """Lister toutes les localisations"""
+    """Lister toutes les localisations - accès pour tous"""
+    if not PermissionChecker.can_list_locations(current_user):
+        raise PermissionDenied("Accès refusé")
+    
     locations = db.query(Location).offset(skip).limit(limit).all()
     return locations
 
@@ -24,9 +28,12 @@ def list_locations(
 def create_location(
     data: LocationCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_technician_or_admin),
+    current_user: User = Depends(get_current_user),
 ):
-    """Créer une nouvelle localisation"""
+    """Créer une nouvelle localisation - UNIQUEMENT admin"""
+    if not PermissionChecker.can_create_location(current_user):
+        raise PermissionDenied("Seul un administrateur peut créer des localisations")
+    
     location = Location(
         name=data.name,
         description=data.description,
@@ -42,12 +49,14 @@ def create_location(
 def get_location(
     location_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    """Récupérer les détails d'une localisation"""
+    """Récupérer les détails d'une localisation - accès pour tous"""
+    if not PermissionChecker.can_view_location(current_user):
+        raise PermissionDenied("Accès refusé")
+    
     location = db.query(Location).filter(Location.id == location_id).first()
     if not location:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Localisation non trouvée")
     return location
 
@@ -57,12 +66,14 @@ def update_location(
     location_id: int,
     data: LocationUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_technician_or_admin),
+    current_user: User = Depends(get_current_user),
 ):
-    """Modifier une localisation"""
+    """Modifier une localisation - UNIQUEMENT admin"""
+    if not PermissionChecker.can_update_location(current_user):
+        raise PermissionDenied("Seul un administrateur peut modifier les localisations")
+    
     location = db.query(Location).filter(Location.id == location_id).first()
     if not location:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Localisation non trouvée")
     
     if data.name is not None:
@@ -81,12 +92,14 @@ def update_location(
 def delete_location(
     location_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
 ):
-    """Supprimer une localisation"""
+    """Supprimer une localisation - Techniciens et admins"""
+    if not PermissionChecker.can_delete_location(current_user):
+        raise PermissionDenied("Seuls les techniciens et administrateurs peuvent supprimer les localisations")
+    
     location = db.query(Location).filter(Location.id == location_id).first()
     if not location:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Localisation non trouvée")
     
     db.delete(location)

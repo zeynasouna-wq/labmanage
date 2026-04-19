@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.models import User, MovementType
-from app.core.dependencies import get_current_user, require_technician_or_admin
+from app.core.dependencies import get_current_user
+from app.core.permissions import PermissionChecker, PermissionDenied
 from app.schemas.schemas import StockMovementCreate, StockMovementResponse, PaginatedResponse
 from app.services import movement_service
 import math
@@ -21,8 +22,12 @@ def list_movements(
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    # ✓ Tous peuvent lister les mouvements (lecture seule)
+    if not PermissionChecker.can_list_movements(current_user):
+        raise PermissionDenied("Accès refusé")
+    
     skip = (page - 1) * size
     items, total = movement_service.get_movements(
         db, skip=skip, limit=size,
@@ -50,8 +55,12 @@ def list_movements(
 def create_movement(
     data: StockMovementCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_technician_or_admin),
+    current_user: User = Depends(get_current_user),
 ):
+    # ✓ Admin et technicien peuvent créer des mouvements
+    if not PermissionChecker.can_create_movement(current_user):
+        raise PermissionDenied("Seuls les admins et techniciens peuvent créer des mouvements")
+    
     movement = movement_service.create_movement(db, data, current_user)
     resp = StockMovementResponse.model_validate(movement)
     resp.product_name = movement.product.name if movement.product else None
@@ -64,8 +73,12 @@ def create_movement(
 def get_movement(
     movement_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    # ✓ Tous peuvent voir un mouvement
+    if not PermissionChecker.can_view_movement(current_user):
+        raise PermissionDenied("Accès refusé")
+    
     return movement_service.get_movement(db, movement_id)
 
 
@@ -73,6 +86,10 @@ def get_movement(
 def delete_movement(
     movement_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_technician_or_admin),
+    current_user: User = Depends(get_current_user),
 ):
+    # ✓ Techniciens et admins peuvent supprimer les mouvements
+    if not PermissionChecker.can_delete_movement(current_user):
+        raise PermissionDenied("Seuls les techniciens et administrateurs peuvent supprimer les mouvements")
+    
     movement_service.delete_movement(db, movement_id)

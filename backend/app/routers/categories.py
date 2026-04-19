@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.models import User, Category
-from app.core.dependencies import get_current_user, require_technician_or_admin, require_admin
+from app.core.dependencies import get_current_user, require_admin
+from app.core.permissions import PermissionChecker, PermissionDenied
 from app.schemas.schemas import CategoryCreate, CategoryUpdate, CategoryResponse
 from sqlalchemy import select
 
@@ -14,9 +15,12 @@ def list_categories(
     skip: int = Query(0, ge=0),
     limit: int = Query(10000, le=50000),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    """Lister toutes les catégories"""
+    """Lister toutes les catégories - accès pour tous"""
+    if not PermissionChecker.can_list_categories(current_user):
+        raise PermissionDenied("Accès refusé")
+    
     categories = db.query(Category).offset(skip).limit(limit).all()
     return categories
 
@@ -25,9 +29,12 @@ def list_categories(
 def create_category(
     data: CategoryCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_technician_or_admin),
+    current_user: User = Depends(get_current_user),
 ):
-    """Créer une nouvelle catégorie"""
+    """Créer une nouvelle catégorie - UNIQUEMENT admin"""
+    if not PermissionChecker.can_create_category(current_user):
+        raise PermissionDenied("Seul un administrateur peut créer des catégories")
+    
     category = Category(
         name=data.name,
         description=data.description,
@@ -43,12 +50,14 @@ def create_category(
 def get_category(
     category_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    """Récupérer les détails d'une catégorie"""
+    """Récupérer les détails d'une catégorie - accès pour tous"""
+    if not PermissionChecker.can_view_category(current_user):
+        raise PermissionDenied("Accès refusé")
+    
     category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Catégorie non trouvée")
     return category
 
@@ -58,12 +67,14 @@ def update_category(
     category_id: int,
     data: CategoryUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_technician_or_admin),
+    current_user: User = Depends(get_current_user),
 ):
-    """Modifier une catégorie"""
+    """Modifier une catégorie - UNIQUEMENT admin"""
+    if not PermissionChecker.can_update_category(current_user):
+        raise PermissionDenied("Seul un administrateur peut modifier les catégories")
+    
     category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Catégorie non trouvée")
     
     if data.name is not None:
@@ -82,12 +93,14 @@ def update_category(
 def delete_category(
     category_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
 ):
-    """Supprimer une catégorie"""
+    """Supprimer une catégorie - Techniciens et admins"""
+    if not PermissionChecker.can_delete_category(current_user):
+        raise PermissionDenied("Seuls les techniciens et administrateurs peuvent supprimer les catégories")
+    
     category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Catégorie non trouvée")
     
     db.delete(category)

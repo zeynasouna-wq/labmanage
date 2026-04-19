@@ -1,9 +1,10 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.models.models import User
+from app.models.models import User, UserRole
 from app.core.dependencies import get_current_user, require_admin
+from app.core.permissions import PermissionChecker, PermissionDenied
 from app.schemas.schemas import UserCreate, UserUpdate, UserResponse, UserPasswordChange
 from app.services import user_service
 
@@ -15,8 +16,12 @@ def list_users(
     skip: int = Query(0, ge=0),
     limit: int = Query(1000, le=10000),
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
 ):
+    # ✗ UNIQUEMENT admin peut lister les utilisateurs
+    if not PermissionChecker.can_list_users(current_user):
+        raise PermissionDenied("Seul un administrateur peut lister les utilisateurs")
+    
     return user_service.get_users(db, skip=skip, limit=limit)
 
 
@@ -24,9 +29,12 @@ def list_users(
 def create_user(
     data: UserCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
 ):
-    """Seul un admin peut créer des comptes."""
+    # ✗ UNIQUEMENT admin peut créer des utilisateurs
+    if not PermissionChecker.can_create_user(current_user):
+        raise PermissionDenied("Seul un administrateur peut créer des utilisateurs")
+    
     return user_service.create_user(db, data, created_by=current_user)
 
 
@@ -36,11 +44,10 @@ def get_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Users can view their own profile; admins can view any
-    from app.models.models import UserRole
-    if current_user.role != UserRole.admin and current_user.id != user_id:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="Accès refusé")
+    # ✗ Admins peuvent voir n'importe quel utilisateur, autres peuvent voir leur profil
+    if not PermissionChecker.can_view_user(current_user, user_id):
+        raise PermissionDenied("Vous ne pouvez consulter que votre propre profil")
+    
     return user_service.get_user_by_id(db, user_id)
 
 
@@ -49,8 +56,12 @@ def update_user(
     user_id: int,
     data: UserUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
 ):
+    # ✗ UNIQUEMENT admin peut modifier les utilisateurs
+    if not PermissionChecker.can_update_user(current_user):
+        raise PermissionDenied("Seul un administrateur peut modifier les utilisateurs")
+    
     return user_service.update_user(db, user_id, data)
 
 
@@ -58,8 +69,12 @@ def update_user(
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
 ):
+    # ✗ UNIQUEMENT admin peut supprimer des utilisateurs
+    if not PermissionChecker.can_delete_user(current_user):
+        raise PermissionDenied("Seul un administrateur peut désactiver des utilisateurs")
+    
     user_service.delete_user(db, user_id, current_user)
 
 
@@ -69,4 +84,5 @@ def change_password(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # ✓ Tous les utilisateurs authentifiés peuvent changer leur mot de passe
     user_service.change_password(db, current_user, data)
