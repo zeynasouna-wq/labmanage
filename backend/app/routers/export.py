@@ -2,7 +2,7 @@
 API Router pour l'export de données
 """
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, Response
 import io
 import zipfile
 from sqlalchemy.orm import Session
@@ -42,8 +42,8 @@ def export_all_csv(
     try:
         zip_content = CSVExportService.create_zip_export(db)
         
-        return StreamingResponse(
-            iter([zip_content]),
+        return Response(
+            content=zip_content,
             media_type="application/zip",
             headers={
                 "Content-Disposition": "attachment; filename=labmanage_export.zip"
@@ -65,8 +65,8 @@ def export_products_csv(
     try:
         csv_content = CSVExportService.export_products(db)
         
-        return StreamingResponse(
-            iter([csv_content]),
+        return Response(
+            content=csv_content.encode('utf-8'),
             media_type="text/csv",
             headers={
                 "Content-Disposition": "attachment; filename=produits.csv"
@@ -88,8 +88,8 @@ def export_movements_csv(
     try:
         csv_content = CSVExportService.export_movements(db)
         
-        return StreamingResponse(
-            iter([csv_content]),
+        return Response(
+            content=csv_content.encode('utf-8'),
             media_type="text/csv",
             headers={
                 "Content-Disposition": "attachment; filename=mouvements_stock.csv"

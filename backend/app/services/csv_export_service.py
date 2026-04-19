@@ -42,10 +42,9 @@ class CSVExportService:
         
         # Headers
         writer.writerow([
-            'ID', 'Nom', 'Référence', 'Numéro Lot', 'Description', 
+            'ID', 'Nom', 'Référence', 'Description', 
             'Stock Actuel', 'Stock Minimum', 'Stock Alerte',
-            'Unité', 'Date Expiration', 'Actif',
-            'Fournisseur', 'Localisation', 'Catégorie',
+            'Actif', 'Fournisseur', 'Localisation', 'Catégorie',
             'Date Création', 'Date Modification'
         ])
         
@@ -55,13 +54,10 @@ class CSVExportService:
                 product.id,
                 product.name,
                 product.reference or '',
-                product.lot_number or '',
                 product.description or '',
                 product.current_stock,
                 product.minimum_stock,
                 product.alert_stock,
-                product.unit,
-                product.expiry_date.strftime('%Y-%m-%d') if product.expiry_date else '',
                 'Oui' if product.is_active else 'Non',
                 product.supplier.name if product.supplier else '',
                 product.location.name if product.location else '',
@@ -97,7 +93,7 @@ class CSVExportService:
                 movement.quantity,
                 movement.stock_before,
                 movement.stock_after,
-                movement.lot_number or '',
+                movement.lot.lot_number if movement.lot else '',
                 movement.reason or '',
                 movement.reference_document or '',
                 movement.user.email if movement.user else '',
