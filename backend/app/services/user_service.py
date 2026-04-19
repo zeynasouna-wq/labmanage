@@ -50,8 +50,7 @@ def delete_user(db: Session, user_id: int, current_user: User):
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Vous ne pouvez pas supprimer votre propre compte")
     user = get_user_by_id(db, user_id)
-    user.is_active = False
-    user.status = UserStatus.disabled
+    db.delete(user)
     db.commit()
 
 
@@ -60,3 +59,22 @@ def change_password(db: Session, user: User, data: UserPasswordChange):
         raise HTTPException(status_code=400, detail="Mot de passe actuel incorrect")
     user.hashed_password = get_password_hash(data.new_password)
     db.commit()
+
+
+def toggle_user_status(db: Session, user_id: int, current_user: User) -> User:
+    """Toggle user active status (enable/disable)"""
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Vous ne pouvez pas modifier votre propre statut")
+    
+    user = get_user_by_id(db, user_id)
+    user.is_active = not user.is_active
+    
+    # Update status enum if needed
+    if user.is_active:
+        user.status = UserStatus.active
+    else:
+        user.status = UserStatus.disabled
+    
+    db.commit()
+    db.refresh(user)
+    return user

@@ -54,7 +54,6 @@ interface Category {
   name: string;
 }
 
-// ─── FIX : login et logout ajoutés dans AuthContextType ─────────────
 interface AuthContextType {
   user: { role: string; username: string; name?: string } | null;
   login: (email: string, password: string) => Promise<void>;
@@ -81,7 +80,7 @@ const api = {
       const res = await fetch(`${API_BASE}${path}`, opts);
       if (res.status === 401) {
         this.token = null;
-        localStorage.removeItem("labostock_token");
+        localStorage.removeItem("NGStock_token");
         window.location.reload();
         throw new Error("Session expirée");
       }
@@ -733,9 +732,18 @@ function Modal({ title, onClose, children, footer }: { title: any; onClose: any;
   );
 }
 
+// ─── Access Denied Component ─────────────────────────────────────────
+function AccessDenied() {
+  return (
+    <div style={{ textAlign: "center", padding: "48px 20px", color: "var(--text-muted)" }}>
+      <div style={{ fontSize: "18px", fontWeight: "600", marginBottom: "8px" }}>Accès refusé</div>
+      <div>Vous n'avez pas les permissions nécessaires pour accéder à cette page.</div>
+    </div>
+  );
+}
+
 // ─── Login Page ──────────────────────────────────────────────────────
 function LoginPage() {
-  // FIX : on récupère login depuis le contexte correctement typé
   const auth = useContext(AuthContext)!;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -760,7 +768,7 @@ function LoginPage() {
       <div className="login-card">
         <div className="login-brand">
           <span className="brand-icon">{icons.flask}</span>
-          <h1>LaboStock</h1>
+          <h1>NGStock</h1>
         </div>
         {error && <div className="login-error">{error}</div>}
         <form onSubmit={handleSubmit}>
@@ -903,12 +911,10 @@ function ProductsPage() {
   const [categories, setCategories] = useState<any[]>([]);
   const [form, setForm] = useState<any>({ name: "", reference: "", description: "", minimum_stock: "0", alert_stock: "0", supplier_id: "", location_id: "", category_id: "", lots: [] });
   const [lotForm, setLotForm] = useState<any>({ lot_number: "", quantity: "", expiry_date: "", notes: "" });
-  const [selectedLot, setSelectedLot] = useState<any>(null);
   const [lotModalMode, setLotModalMode] = useState<"create" | "edit">("create");
   const notify = useContext(NotifContext);
   const auth = useContext(AuthContext);
 
-  // ─── Vérifier les permissions d'édition ───────────────────────────
   const canEdit = PermissionService.canUpdateProduct(auth?.user?.role as any);
   const canDelete = PermissionService.canDeleteProduct(auth?.user?.role as any);
   const canCreate = PermissionService.canCreateProduct(auth?.user?.role as any);
@@ -978,72 +984,65 @@ function ProductsPage() {
     } catch { notify?.("Erreur chargement détails", "error"); }
   };
 
-  // openLots est maintenant remplacé par openEdit qui gère aussi les lots
-  // Le bouton de lots appelle directement openEdit(p)
-
   const handleSave = async () => {
-  try {
-    if (!form.reference || !form.reference.trim()) {
-      notify?.("La référence du produit est obligatoire", "error");
-      return;
-    }
-    if (!form.name || !form.name.trim()) {
-      notify?.("Le nom du produit est obligatoire", "error");
-      return;
-    }
+    try {
+      if (!form.reference || !form.reference.trim()) {
+        notify?.("La référence du produit est obligatoire", "error");
+        return;
+      }
+      if (!form.name || !form.name.trim()) {
+        notify?.("Le nom du produit est obligatoire", "error");
+        return;
+      }
 
-    const payload: any = {
-      name: form.name,
-      reference: form.reference,
-      description: form.description,
-      minimum_stock: parseInt(form.minimum_stock) || 0,
-      alert_stock: parseInt(form.alert_stock) || 0,
-      supplier_id: form.supplier_id ? parseInt(form.supplier_id) : null,
-      location_id: form.location_id ? parseInt(form.location_id) : null,
-      category_id: form.category_id ? parseInt(form.category_id) : null,
-    };
+      const payload: any = {
+        name: form.name,
+        reference: form.reference,
+        description: form.description,
+        minimum_stock: parseInt(form.minimum_stock) || 0,
+        alert_stock: parseInt(form.alert_stock) || 0,
+        supplier_id: form.supplier_id ? parseInt(form.supplier_id) : null,
+        location_id: form.location_id ? parseInt(form.location_id) : null,
+        category_id: form.category_id ? parseInt(form.category_id) : null,
+      };
 
-    if (modal === "create") {
-      // En création : on envoie tous les lots dans le payload
-      payload.lots = (form.lots || []).map((lot: any) => ({
-        lot_number: lot.lot_number,
-        quantity: parseInt(lot.quantity) || 0,
-        expiry_date: lot.expiry_date || null,
-        notes: lot.notes || null,
-      }));
-      await api.post("/products/", payload);
-      notify?.("Produit créé");
-    } else {
-  // 1. PATCH infos produit
-  await api.patch(`/products/${selected.id}`, payload);
+      if (modal === "create") {
+        payload.lots = (form.lots || []).map((lot: any) => ({
+          lot_number: lot.lot_number,
+          quantity: parseInt(lot.quantity) || 0,
+          expiry_date: lot.expiry_date || null,
+          notes: lot.notes || null,
+        }));
+        await api.post("/products/", payload);
+        notify?.("Produit créé");
+      } else {
+        await api.patch(`/products/${selected.id}`, payload);
 
-  // 2. Supprimer les lots retirés (existaient en DB mais absents du form actuel)
-  const currentLotIds = new Set((form.lots || []).filter((l: any) => l.id).map((l: any) => l.id));
-  const originalLots = (selected as any).lots || [];
-  for (const lot of originalLots) {
-    if (!currentLotIds.has(lot.id)) {
-      await api.del(`/products/${selected.id}/lots/${lot.id}`);
-    }
-  }
+        const currentLotIds = new Set((form.lots || []).filter((l: any) => l.id).map((l: any) => l.id));
+        const originalLots = (selected as any).lots || [];
+        for (const lot of originalLots) {
+          if (!currentLotIds.has(lot.id)) {
+            await api.del(`/products/${selected.id}/lots/${lot.id}`);
+          }
+        }
 
-  // 3. Ajouter les nouveaux lots (sans id)
-  const newLots = (form.lots || []).filter((lot: any) => !lot.id);
-  for (const lot of newLots) {
-    await api.post(`/products/${selected.id}/lots`, {
-      lot_number: lot.lot_number,
-      quantity: parseInt(lot.quantity) || 0,
-      expiry_date: lot.expiry_date || null,
-      notes: lot.notes || null,
-    });
-  }
+        const newLots = (form.lots || []).filter((lot: any) => !lot.id);
+        for (const lot of newLots) {
+          await api.post(`/products/${selected.id}/lots`, {
+            lot_number: lot.lot_number,
+            quantity: parseInt(lot.quantity) || 0,
+            expiry_date: lot.expiry_date || null,
+            notes: lot.notes || null,
+          });
+        }
 
-  notify?.("Produit modifié");
-}
+        notify?.("Produit modifié");
+      }
 
-    setModal(null);
-    load();
-  } catch (e: unknown) { notify?.(e instanceof Error ? e.message : "Erreur", "error"); }
-};
+      setModal(null);
+      load();
+    } catch (e: unknown) { notify?.(e instanceof Error ? e.message : "Erreur", "error"); }
+  };
 
   const handleDelete = async (p: Product) => {
     if (!confirm(`Archiver "${p.name}" ?`)) return;
@@ -1069,9 +1068,6 @@ function ProductsPage() {
   const removeLotFromForm = (index: number) => {
     setForm({ ...form, lots: (form.lots || []).filter((_: any, i: number) => i !== index) });
   };
-
-  // Les lots sont maintenant gérés lors de la création/édition du produit via addLotToForm et removeLotFromForm
-  // Les fonctions handleSaveLot, handleDeleteLot, handleEditLot ne sont plus utilisées
 
   return (
     <>
@@ -1194,7 +1190,6 @@ function ProductsPage() {
               <button className="btn btn-primary btn-sm" onClick={() => setLotModalMode("create")}>Ajouter un lot</button>
             </div>
 
-            {/* Formulaire d'ajout/édition de lot */}
             {lotModalMode === "create" && (
               <div style={{ background: "var(--bg-tertiary)", padding: 12, borderRadius: "var(--radius)", marginBottom: 12 }}>
                 <div className="form-row">
@@ -1224,7 +1219,6 @@ function ProductsPage() {
               </div>
             )}
 
-            {/* Liste des lots */}
             {form.lots && form.lots.length > 0 ? (
               <div style={{ marginTop: 12 }}>
                 <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
@@ -1299,12 +1293,12 @@ function ProductsPage() {
           </div>
         </Modal>
       )}
-
     </>
   );
 }
 
 // ─── Suppliers Page ──────────────────────────────────────────────────
+// FIX : tous les hooks sont déclarés AVANT tout return conditionnel
 function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [search, setSearch] = useState<string>("");
@@ -1314,17 +1308,15 @@ function SuppliersPage() {
   const [form, setForm] = useState<any>({ name: "", contact: "", email: "", phone: "", address: "" });
   const notify = useContext(NotifContext);
   const auth = useContext(AuthContext);
+  const userRole = auth?.user?.role || "viewer";
 
-  // ─── Vérifier que seul l'admin peut accéder à cette page ──────────
-  if (!PermissionService.canListSuppliers(auth?.user?.role as any)) {
-    return (
-      <div style={{ textAlign: "center", padding: "48px 20px", color: "var(--text-muted)" }}>
-        <div style={{ fontSize: "18px", fontWeight: "600", marginBottom: "8px" }}>Accès refusé</div>
-        <div>Vous n'avez pas les permissions nécessaires pour accéder à cette page.</div>
-      </div>
-    );
-  }
+  // Admin et technicien peuvent consulter ; seul l'admin peut agir
+  const canList = userRole === "admin" || userRole === "technician";
+  const canCreate = PermissionService.canCreateSupplier(auth?.user?.role as any);
+  const canUpdate = PermissionService.canUpdateSupplier(auth?.user?.role as any);
+  const canDelete = PermissionService.canDeleteSupplier(auth?.user?.role as any);
 
+  // FIX : load et useEffect déclarés AVANT le return conditionnel
   const load = async () => {
     try {
       setLoading(true);
@@ -1334,6 +1326,9 @@ function SuppliersPage() {
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
+
+  // Accès refusé après tous les hooks
+  if (!canList) return <AccessDenied />;
 
   const filtered = suppliers.filter((s) =>
     (s.name + (s.email || "")).toLowerCase().includes(search.toLowerCase())
@@ -1373,26 +1368,38 @@ function SuppliersPage() {
             <input placeholder="Rechercher un fournisseur…" value={search} onChange={(e: any) => setSearch(e.target.value)} />
           </div>
           <div style={{ flex: 1 }} />
-          <button className="btn btn-primary btn-sm" onClick={openCreate}>{icons.plus} Nouveau fournisseur</button>
+          {/* Bouton création uniquement pour les admins */}
+          {canCreate && <button className="btn btn-primary btn-sm" onClick={openCreate}>{icons.plus} Nouveau fournisseur</button>}
         </div>
         {loading ? <div className="loading-bar" /> : (
           <table>
-            <thead><tr><th>Nom</th><th>Contact</th><th>Email</th><th>Téléphone</th><th>Actions</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Nom</th>
+                <th>Contact</th>
+                <th>Email</th>
+                <th>Téléphone</th>
+                {/* Colonne Actions uniquement pour les admins, comme catégories/localisations */}
+                {userRole === "admin" && <th>Actions</th>}
+              </tr>
+            </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={5}><div className="empty-state"><p>Aucun fournisseur</p></div></td></tr>
+                <tr><td colSpan={userRole === "admin" ? 5 : 4}><div className="empty-state"><p>Aucun fournisseur</p></div></td></tr>
               ) : filtered.map((s: any) => (
                 <tr key={s.id}>
                   <td className="cell-main">{s.name}</td>
                   <td>{s.contact || "—"}</td>
                   <td style={{ fontSize: 13 }}>{s.email || "—"}</td>
                   <td style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>{s.phone || "—"}</td>
-                  <td>
-                    <div className="action-cell">
-                      <button className="btn-icon" onClick={() => openEdit(s)}>{icons.edit}</button>
-                      <button className="btn-icon" onClick={() => handleDelete(s)}>{icons.trash}</button>
-                    </div>
-                  </td>
+                  {userRole === "admin" && (
+                    <td>
+                      <div className="action-cell">
+                        {canUpdate && <button className="btn-icon" onClick={() => openEdit(s)}>{icons.edit}</button>}
+                        {canDelete && <button className="btn-icon" onClick={() => handleDelete(s)}>{icons.trash}</button>}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -1524,7 +1531,7 @@ function MovementsPage() {
         <div className="table-toolbar">
           <span style={{ fontWeight: 600, fontSize: 14 }}>Historique des mouvements</span>
           <div style={{ flex: 1 }} />
-          {userRole && (userRole === "admin" || userRole === "technician") && (
+          {(userRole === "admin" || userRole === "technician") && (
             <button className="btn btn-primary btn-sm" onClick={openCreate}>{icons.plus} Nouveau mouvement</button>
           )}
         </div>
@@ -1667,6 +1674,7 @@ function MovementsPage() {
 }
 
 // ─── Users Page ──────────────────────────────────────────────────────
+// FIX : tous les hooks sont déclarés AVANT tout return conditionnel
 function UsersPage() {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1676,16 +1684,9 @@ function UsersPage() {
   const notify = useContext(NotifContext);
   const auth = useContext(AuthContext);
 
-  // ─── Vérifier que seul l'admin peut accéder à cette page ──────────
-  if (!PermissionService.canListUsers(auth?.user?.role as any)) {
-    return (
-      <div style={{ textAlign: "center", padding: "48px 20px", color: "var(--text-muted)" }}>
-        <div style={{ fontSize: "18px", fontWeight: "600", marginBottom: "8px" }}>Accès refusé</div>
-        <div>Vous n'avez pas les permissions nécessaires pour accéder à cette page.</div>
-      </div>
-    );
-  }
+  const canList = PermissionService.canListUsers(auth?.user?.role as any);
 
+  // FIX : load et useEffect déclarés AVANT le return conditionnel
   const load = async () => {
     try {
       setLoading(true);
@@ -1695,6 +1696,9 @@ function UsersPage() {
     setLoading(false);
   };
   useEffect(() => { load(); }, []);
+
+  // Accès refusé après tous les hooks
+  if (!canList) return <AccessDenied />;
 
   const openCreate = () => {
     setForm({ name: "", email: "", password: "", role: "viewer" });
@@ -1720,9 +1724,18 @@ function UsersPage() {
     } catch (e: any) { notify?.(e?.message || "Erreur", "error"); }
   };
   const handleDelete = async (u: any) => {
-    if (!confirm(`Désactiver "${u.name}" ?`)) return;
-    try { await api.del(`/users/${u.id}`); notify?.("Utilisateur désactivé"); load(); }
+    if (!confirm(`Supprimer définitivement "${u.name}" ? Cette action est irréversible.`)) return;
+    try { await api.del(`/users/${u.id}`); notify?.("Utilisateur supprimé"); load(); }
     catch (e: any) { notify?.(e?.message || "Erreur", "error"); }
+  };
+  const handleToggle = async (u: any) => {
+    const action = u.is_active ? "désactiver" : "activer";
+    if (!confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} "${u.name}" ?`)) return;
+    try {
+      await api.post(`/users/${u.id}/toggle-status`, {});
+      notify?.(`Utilisateur ${action}`);
+      load();
+    } catch (e: any) { notify?.(e?.message || "Erreur", "error"); }
   };
 
   const roleLabel = (r: any) => {
@@ -1759,8 +1772,11 @@ function UsersPage() {
                   <td><span className={`badge ${u.is_active !== false ? "badge-accent" : "badge-danger"}`}>{u.is_active !== false ? "Actif" : "Inactif"}</span></td>
                   <td>
                     <div className="action-cell">
-                      <button className="btn-icon" onClick={() => openEdit(u)}>{icons.edit}</button>
-                      <button className="btn-icon" onClick={() => handleDelete(u)}>{icons.trash}</button>
+                      <button className="btn-icon" onClick={() => openEdit(u)} title="Modifier">{icons.edit}</button>
+                      <button className="btn-icon" onClick={() => handleToggle(u)} title={u.is_active !== false ? "Désactiver" : "Activer"} style={{ opacity: u.is_active !== false ? 1 : 0.6 }}>
+                        {u.is_active !== false ? "🔒" : "🔓"}
+                      </button>
+                      <button className="btn-icon" onClick={() => handleDelete(u)} title="Supprimer">{icons.trash}</button>
                     </div>
                   </td>
                 </tr>
@@ -1817,7 +1833,6 @@ function CategoriesPage() {
   const auth = useContext(AuthContext);
   const userRole = auth?.user?.role || "viewer";
 
-  // ─── Vérifier les permissions ────────────────────────────────────
   const canCreate = PermissionService.canCreateCategory(auth?.user?.role as any);
   const canUpdate = PermissionService.canUpdateCategory(auth?.user?.role as any);
   const canDelete = PermissionService.canDeleteCategory(auth?.user?.role as any);
@@ -1882,7 +1897,7 @@ function CategoriesPage() {
         </div>
         {loading ? <div className="loading-bar" /> : (
           <table>
-            <thead><tr><th>Couleur</th><th>Nom</th><th>Description</th>{userRole !== "viewer" && <th>Actions</th>}</tr></thead>
+            <thead><tr><th>Couleur</th><th>Nom</th><th>Description</th>{userRole === "admin" && <th>Actions</th>}</tr></thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr><td colSpan={4}><div className="empty-state"><p>Aucune catégorie trouvée</p></div></td></tr>
@@ -1891,7 +1906,7 @@ function CategoriesPage() {
                   <td><div style={{ width: 24, height: 24, borderRadius: "var(--radius)", background: c.color || "var(--bg-tertiary)" }} /></td>
                   <td className="cell-main">{c.name}</td>
                   <td style={{ fontSize: 13 }}>{c.description || "—"}</td>
-                  {userRole !== "viewer" && (
+                  {userRole === "admin" && (
                     <td>
                       <div className="action-cell">
                         {canUpdate && <button className="btn-icon" onClick={() => {
@@ -1947,7 +1962,6 @@ function LocationsPage() {
   const auth = useContext(AuthContext);
   const userRole = auth?.user?.role || "viewer";
 
-  // ─── Vérifier les permissions ────────────────────────────────────
   const canCreate = PermissionService.canCreateLocation(auth?.user?.role as any);
   const canUpdate = PermissionService.canUpdateLocation(auth?.user?.role as any);
   const canDelete = PermissionService.canDeleteLocation(auth?.user?.role as any);
@@ -2012,7 +2026,7 @@ function LocationsPage() {
         </div>
         {loading ? <div className="loading-bar" /> : (
           <table>
-            <thead><tr><th>Nom</th><th>Description</th><th>Contrôle temp.</th>{userRole !== "viewer" && <th>Actions</th>}</tr></thead>
+            <thead><tr><th>Nom</th><th>Description</th><th>Contrôle temp.</th>{userRole === "admin" && <th>Actions</th>}</tr></thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr><td colSpan={4}><div className="empty-state"><p>Aucune localisation trouvée</p></div></td></tr>
@@ -2021,7 +2035,7 @@ function LocationsPage() {
                   <td className="cell-main">{l.name}</td>
                   <td style={{ fontSize: 13 }}>{l.description || "—"}</td>
                   <td><span className={`badge ${l.temperature_controlled ? "badge-accent" : "badge-muted"}`}>{l.temperature_controlled ? "Oui" : "Non"}</span></td>
-                  {userRole !== "viewer" && (
+                  {userRole === "admin" && (
                     <td>
                       <div className="action-cell">
                         {canUpdate && <button className="btn-icon" onClick={() => {
@@ -2069,23 +2083,24 @@ function LocationsPage() {
 
 // ─── App Shell ───────────────────────────────────────────────────────
 const NAV = [
-  { key: "dashboard", label: "Tableau de bord", icon: icons.dashboard },
-  { key: "products", label: "Produits", icon: icons.products },
-  { key: "suppliers", label: "Fournisseurs", icon: icons.suppliers },
-  { key: "categories", label: "Catégories", icon: icons.products },
-  { key: "locations", label: "Localisations", icon: icons.products },
-  { key: "movements", label: "Mouvements", icon: icons.movements },
-  { key: "users", label: "Utilisateurs", icon: icons.users },
+  { key: "dashboard",  label: "Tableau de bord", icon: icons.dashboard,  roles: ["admin", "technician", "viewer"] },
+  { key: "products",   label: "Produits",         icon: icons.products,   roles: ["admin", "technician", "viewer"] },
+  // FIX : technicien peut voir les fournisseurs (lecture seule)
+  { key: "suppliers",  label: "Fournisseurs",     icon: icons.suppliers,  roles: ["admin", "technician"] },
+  { key: "categories", label: "Catégories",       icon: icons.products,   roles: ["admin", "technician", "viewer"] },
+  { key: "locations",  label: "Localisations",    icon: icons.products,   roles: ["admin", "technician", "viewer"] },
+  { key: "movements",  label: "Mouvements",       icon: icons.movements,  roles: ["admin", "technician", "viewer"] },
+  { key: "users",      label: "Utilisateurs",     icon: icons.users,      roles: ["admin"] },
 ];
 
 const PAGE_META: Record<string, { title: string; subtitle: string }> = {
-  dashboard: { title: "Tableau de bord", subtitle: "Vue d'ensemble du laboratoire" },
-  products: { title: "Produits", subtitle: "Gestion des réactifs, consommables et équipements" },
-  suppliers: { title: "Fournisseurs", subtitle: "Annuaire des fournisseurs" },
-  categories: { title: "Catégories", subtitle: "Gestion des catégories de produits" },
-  locations: { title: "Localisations", subtitle: "Gestion des lieux de stockage" },
-  movements: { title: "Mouvements de stock", subtitle: "Entrées et sorties de stock" },
-  users: { title: "Utilisateurs", subtitle: "Gestion des accès" },
+  dashboard:  { title: "Tableau de bord",         subtitle: "Vue d'ensemble du laboratoire" },
+  products:   { title: "Produits",                subtitle: "Gestion des réactifs, consommables et équipements" },
+  suppliers:  { title: "Fournisseurs",            subtitle: "Annuaire des fournisseurs" },
+  categories: { title: "Catégories",              subtitle: "Gestion des catégories de produits" },
+  locations:  { title: "Localisations",           subtitle: "Gestion des lieux de stockage" },
+  movements:  { title: "Mouvements de stock",     subtitle: "Entrées et sorties de stock" },
+  users:      { title: "Utilisateurs",            subtitle: "Gestion des accès" },
 };
 
 // ─── Export Button Component ────────────────────────────────────────
@@ -2095,15 +2110,15 @@ function ExportButton({ token }: { token: string }) {
   const notify = useContext(NotifContext);
 
   const exportOptions = [
-    { key: "all", label: "📦 Tous les enregistrements (ZIP)", icon: "⬇️" },
-    { key: "products", label: "Produits", icon: "📦" },
-    { key: "movements", label: "Mouvements de stock", icon: "📜" },
-    { key: "alerts", label: "Alertes", icon: "⚠️" },
-    { key: "users", label: "Utilisateurs", icon: "👥" },
-    { key: "suppliers", label: "Fournisseurs", icon: "🏢" },
-    { key: "locations", label: "Localisations", icon: "📍" },
-    { key: "categories", label: "Catégories", icon: "🏷️" },
-    { key: "lots", label: "Lots de produits", icon: "📋" },
+    { key: "all",       label: "📦 Tous les enregistrements (ZIP)" },
+    { key: "products",  label: "Produits" },
+    { key: "movements", label: "Mouvements de stock" },
+    { key: "alerts",    label: "Alertes" },
+    { key: "users",     label: "Utilisateurs" },
+    { key: "suppliers", label: "Fournisseurs" },
+    { key: "locations", label: "Localisations" },
+    { key: "categories",label: "Catégories" },
+    { key: "lots",      label: "Lots de produits" },
   ];
 
   const download = async (endpoint: string) => {
@@ -2175,39 +2190,30 @@ function ExportButton({ token }: { token: string }) {
 function AppShell({ user, onLogout }: { user: any; onLogout: () => void }) {
   const [page, setPage] = useState("dashboard");
   const meta = PAGE_META[page];
+  const userRole = user?.role || "viewer";
 
-  // ─── Filtrer la navigation en fonction du rôle ───────────────────
-  const getFilteredNav = () => {
-    const userRole = user?.role || "viewer";
-    return NAV.filter((n: any) => {
-      // Masquer les pages d'administration pour les non-administrateurs
-      if (n.key === "users" && userRole !== "admin") return false;
-      if (n.key === "suppliers" && userRole !== "admin") return false;
-      return true;
-    });
-  };
+  // FIX : filtrage de la nav basé sur le tableau roles de chaque entrée
+  const filteredNav = NAV.filter((n) => n.roles.includes(userRole));
 
-  const filteredNav = getFilteredNav();
-
-  // ─── Rediriger vers le tableau de bord si l'utilisateur accède à une page interdite ───
+  // FIX : redirection uniquement si la page n'est pas autorisée pour ce rôle
   useEffect(() => {
-    const userRole = user?.role || "viewer";
-    if ((page === "users" || page === "suppliers") && userRole !== "admin") {
+    const allowed = NAV.find((n) => n.key === page);
+    if (allowed && !allowed.roles.includes(userRole)) {
       setPage("dashboard");
     }
-  }, [page, user?.role]);
+  }, [page, userRole]);
 
   return (
     <div className="lab-app">
       <aside className="sidebar">
         <div className="sidebar-brand">
           <span className="brand-icon">{icons.flask}</span>
-          <h1>LaboStock</h1>
+          <h1>NGStock</h1>
           <span className="version">v1.0</span>
         </div>
         <nav className="sidebar-nav">
           <div className="sidebar-section-label">Navigation</div>
-          {filteredNav.map((n: any) => (
+          {filteredNav.map((n) => (
             <div key={n.key} className={`nav-item ${page === n.key ? "active" : ""}`} onClick={() => setPage(n.key)}>
               {n.icon}
               {n.label}
@@ -2231,18 +2237,18 @@ function AppShell({ user, onLogout }: { user: any; onLogout: () => void }) {
             <div className="page-title">{meta.title}</div>
             <div className="page-subtitle">{meta.subtitle}</div>
           </div>
-          {user?.role === "admin" && (
+          {userRole === "admin" && (
             <ExportButton token={api.token || ""} />
           )}
         </div>
         <div className="page-body">
-          {page === "dashboard" && <DashboardPage />}
-          {page === "products" && <ProductsPage />}
-          {page === "suppliers" && <SuppliersPage />}
+          {page === "dashboard"  && <DashboardPage />}
+          {page === "products"   && <ProductsPage />}
+          {page === "suppliers"  && <SuppliersPage />}
           {page === "categories" && <CategoriesPage />}
-          {page === "locations" && <LocationsPage />}
-          {page === "movements" && <MovementsPage />}
-          {page === "users" && <UsersPage />}
+          {page === "locations"  && <LocationsPage />}
+          {page === "movements"  && <MovementsPage />}
+          {page === "users"      && <UsersPage />}
         </div>
       </main>
     </div>
@@ -2255,12 +2261,12 @@ export default function App() {
   const [ready, setReady] = useState<boolean>(false);
 
   useEffect(() => {
-    const token = localStorage.getItem("labostock_token");
+    const token = localStorage.getItem("NGStock_token");
     if (token) {
       api.token = token;
       api.get("/auth/me")
         .then((u: any) => { setUser(u); setReady(true); })
-        .catch(() => { api.token = null; localStorage.removeItem("labostock_token"); setReady(true); });
+        .catch(() => { api.token = null; localStorage.removeItem("NGStock_token"); setReady(true); });
     } else {
       setReady(true);
     }
@@ -2269,14 +2275,14 @@ export default function App() {
   const login = async (email: string, password: string): Promise<void> => {
     const data = await api.post("/auth/login", { email, password });
     api.token = data.access_token || data.token;
-    localStorage.setItem("labostock_token", api.token || "");
+    localStorage.setItem("NGStock_token", api.token || "");
     const me = await api.get("/auth/me");
     setUser(me);
   };
 
   const logout = () => {
     api.token = null;
-    localStorage.removeItem("labostock_token");
+    localStorage.removeItem("NGStock_token");
     setUser(null);
   };
 
@@ -2287,7 +2293,6 @@ export default function App() {
   );
 
   return (
-    // FIX : on passe login et logout dans la valeur du contexte
     <AuthContext.Provider value={{ user, login, logout }}>
       <NotifProvider>
         <style>{CSS}</style>

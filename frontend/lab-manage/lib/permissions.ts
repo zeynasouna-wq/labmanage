@@ -137,6 +137,11 @@ export const PermissionService = {
     return role === ROLES.ADMIN;
   },
 
+  canToggleUserStatus: (role: UserRole | null): boolean => {
+    // UNIQUEMENT admin
+    return role === ROLES.ADMIN;
+  },
+
   // ─── Catégories ──────────────────────────────────────────────────
 
   canListCategories: (role: UserRole | null): boolean => {
@@ -150,8 +155,8 @@ export const PermissionService = {
   },
 
   canCreateCategory: (role: UserRole | null): boolean => {
-    // Admin et technicien peuvent créer
-    return role === ROLES.ADMIN || role === ROLES.TECHNICIAN;
+    // UNIQUEMENT admin
+    return role === ROLES.ADMIN;
   },
 
   canUpdateCategory: (role: UserRole | null): boolean => {
@@ -160,8 +165,8 @@ export const PermissionService = {
   },
 
   canDeleteCategory: (role: UserRole | null): boolean => {
-    // Admin et technicien peuvent supprimer
-    return role === ROLES.ADMIN || role === ROLES.TECHNICIAN;
+    // UNIQUEMENT admin
+    return role === ROLES.ADMIN;
   },
 
   // ─── Localisations ───────────────────────────────────────────────
@@ -177,8 +182,8 @@ export const PermissionService = {
   },
 
   canCreateLocation: (role: UserRole | null): boolean => {
-    // Admin et technicien peuvent créer
-    return role === ROLES.ADMIN || role === ROLES.TECHNICIAN;
+    // UNIQUEMENT admin
+    return role === ROLES.ADMIN;
   },
 
   canUpdateLocation: (role: UserRole | null): boolean => {
@@ -187,8 +192,8 @@ export const PermissionService = {
   },
 
   canDeleteLocation: (role: UserRole | null): boolean => {
-    // Admin et technicien peuvent supprimer
-    return role === ROLES.ADMIN || role === ROLES.TECHNICIAN;
+    // UNIQUEMENT admin
+    return role === ROLES.ADMIN;
   },
 
   // ─── Export ──────────────────────────────────────────────────────

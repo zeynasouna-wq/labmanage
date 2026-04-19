@@ -78,6 +78,19 @@ def delete_user(
     user_service.delete_user(db, user_id, current_user)
 
 
+@router.post("/{user_id}/toggle-status", response_model=UserResponse, summary="Activer/Désactiver un utilisateur")
+def toggle_user_status(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # ✗ UNIQUEMENT admin peut changer le statut des utilisateurs
+    if not PermissionChecker.can_update_user(current_user):
+        raise PermissionDenied("Seul un administrateur peut modifier les utilisateurs")
+    
+    return user_service.toggle_user_status(db, user_id, current_user)
+
+
 @router.post("/me/change-password", status_code=204, summary="Changer son mot de passe")
 def change_password(
     data: UserPasswordChange,

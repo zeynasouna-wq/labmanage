@@ -158,8 +158,8 @@ class PermissionChecker:
 
     @staticmethod
     def can_create_category(user: User) -> bool:
-        """Techniciens et admins peuvent créer des catégories"""
-        return user.role in (UserRole.admin, UserRole.technician)
+        """UNIQUEMENT les admins peuvent créer des catégories"""
+        return user.role == UserRole.admin
 
     @staticmethod
     def can_update_category(user: User) -> bool:
@@ -168,8 +168,8 @@ class PermissionChecker:
 
     @staticmethod
     def can_delete_category(user: User) -> bool:
-        """Techniciens et admins peuvent supprimer les catégories"""
-        return user.role in (UserRole.admin, UserRole.technician)
+        """UNIQUEMENT les admins peuvent supprimer les catégories"""
+        return user.role == UserRole.admin
 
     # ─── Localisations ───────────────────────────────────────────────────
 
@@ -185,8 +185,8 @@ class PermissionChecker:
 
     @staticmethod
     def can_create_location(user: User) -> bool:
-        """Techniciens et admins peuvent créer des localisations"""
-        return user.role in (UserRole.admin, UserRole.technician)
+        """UNIQUEMENT les admins peuvent créer des localisations"""
+        return user.role == UserRole.admin
 
     @staticmethod
     def can_update_location(user: User) -> bool:
@@ -195,8 +195,8 @@ class PermissionChecker:
 
     @staticmethod
     def can_delete_location(user: User) -> bool:
-        """Techniciens et admins peuvent supprimer les localisations"""
-        return user.role in (UserRole.admin, UserRole.technician)
+        """UNIQUEMENT les admins peuvent supprimer les localisations"""
+        return user.role == UserRole.admin
 
     # ─── Export ──────────────────────────────────────────────────────────
 
