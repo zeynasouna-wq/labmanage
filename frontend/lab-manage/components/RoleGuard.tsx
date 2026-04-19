@@ -1,7 +1,7 @@
 'use client';
 
 import { ReactNode } from 'react';
-import { UserRole, PermissionService } from './permissions';
+import { UserRole, PermissionService } from '../lib/permissions';
 
 interface RoleGuardProps {
   children: ReactNode;
