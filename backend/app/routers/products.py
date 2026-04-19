@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.models import User
-from app.core.dependencies import get_current_user, require_technician_or_admin, require_admin
+from app.core.dependencies import get_current_user, require_admin, require_technician_or_admin
+from app.core.permissions import PermissionChecker, PermissionDenied
 from app.schemas.schemas import (
     ProductCreate, ProductUpdate, ProductResponse,
     ProductLotCreate, ProductLotResponse, PaginatedResponse
@@ -24,8 +25,12 @@ def list_products(
     category_id: Optional[int] = None,
     is_active: Optional[bool] = True,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    # ✓ Tous peuvent lister les produits
+    if not PermissionChecker.can_list_products(current_user):
+        raise PermissionDenied("Accès refusé")
+    
     skip = (page - 1) * size
     items, total = product_service.get_products(
         db, skip=skip, limit=size, search=search,
@@ -45,8 +50,12 @@ def list_products(
 def create_product(
     data: ProductCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_technician_or_admin),
+    current_user: User = Depends(get_current_user),
 ):
+    # ✓ Admin et technicien peuvent créer
+    if not PermissionChecker.can_create_product(current_user):
+        raise PermissionDenied("Seuls les admins et techniciens peuvent créer des produits")
+    
     return product_service.create_product(db, data)
 
 
@@ -54,8 +63,12 @@ def create_product(
 def get_product(
     product_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    # ✓ Tous peuvent voir un produit
+    if not PermissionChecker.can_view_product(current_user):
+        raise PermissionDenied("Accès refusé")
+    
     return product_service.get_product(db, product_id)
 
 
@@ -64,8 +77,12 @@ def update_product(
     product_id: int,
     data: ProductUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_technician_or_admin),
+    current_user: User = Depends(get_current_user),
 ):
+    # ✗ UNIQUEMENT admin peut modifier (PAS technicien)
+    if not PermissionChecker.can_update_product(current_user):
+        raise PermissionDenied("Seul un administrateur peut modifier les produits")
+    
     return product_service.update_product(db, product_id, data)
 
 
@@ -73,8 +90,12 @@ def update_product(
 def delete_product(
     product_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
 ):
+    # ✗ UNIQUEMENT admin peut supprimer
+    if not PermissionChecker.can_delete_product(current_user):
+        raise PermissionDenied("Seul un administrateur peut supprimer les produits")
+    
     product_service.delete_product(db, product_id)
 
 
@@ -84,8 +105,12 @@ def delete_product(
 def get_lots(
     product_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
+    # ✓ Tous peuvent voir les lots
+    if not PermissionChecker.can_view_product(current_user):
+        raise PermissionDenied("Accès refusé")
+    
     return product_service.get_lots(db, product_id)
 
 
@@ -94,8 +119,12 @@ def add_lot(
     product_id: int,
     data: ProductLotCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_technician_or_admin),
+    current_user: User = Depends(get_current_user),
 ):
+    # ✓ Admin et technicien peuvent ajouter un lot
+    if not PermissionChecker.can_create_product(current_user):
+        raise PermissionDenied("Seuls les admins et techniciens peuvent ajouter des lots")
+    
     return product_service.add_lot(db, product_id, data)
 
 

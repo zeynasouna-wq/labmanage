@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, createContext, useContext, useRef, ReactNode } from "react";
+import { PermissionService } from "@/lib/permissions";
 
 // ─── Type Definitions ────────────────────────────────────────────────
 interface Product {
@@ -785,6 +786,9 @@ function DashboardPage() {
   const [stats, setStats] = useState<any>(null);
   const [recentMvts, setRecentMvts] = useState<any[]>([]);
   const notify = useContext(NotifContext);
+  const auth = useContext(AuthContext);
+  const userRole = auth?.user?.role || "viewer";
+  const canDelete = PermissionService.canDeleteMovement(auth?.user?.role as any);
 
   useEffect(() => {
     (async () => {
@@ -850,7 +854,7 @@ function DashboardPage() {
               <th>Produit</th>
               <th>Quantité</th>
               <th>Date</th>
-              <th>Actions</th>
+              {userRole !== "viewer" && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -869,11 +873,15 @@ function DashboardPage() {
                 <td style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
                   {m.created_at ? new Date(m.created_at).toLocaleDateString("fr-FR") : "—"}
                 </td>
-                <td>
-                  <div className="action-cell">
-                    <button className="btn-icon" title="Supprimer" onClick={() => handleDeleteMovement(m.id)}>{icons.trash}</button>
-                  </div>
-                </td>
+                {userRole !== "viewer" && (
+                  <td>
+                    <div className="action-cell">
+                      {canDelete && (
+                        <button className="btn-icon" title="Supprimer" onClick={() => handleDeleteMovement(m.id)}>{icons.trash}</button>
+                      )}
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -898,6 +906,12 @@ function ProductsPage() {
   const [selectedLot, setSelectedLot] = useState<any>(null);
   const [lotModalMode, setLotModalMode] = useState<"create" | "edit">("create");
   const notify = useContext(NotifContext);
+  const auth = useContext(AuthContext);
+
+  // ─── Vérifier les permissions d'édition ───────────────────────────
+  const canEdit = PermissionService.canUpdateProduct(auth?.user?.role as any);
+  const canDelete = PermissionService.canDeleteProduct(auth?.user?.role as any);
+  const canCreate = PermissionService.canCreateProduct(auth?.user?.role as any);
 
   const load = async () => {
     try {
@@ -1068,7 +1082,7 @@ function ProductsPage() {
             <input placeholder="Rechercher un produit…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <div style={{ flex: 1 }} />
-          <button className="btn btn-primary btn-sm" onClick={openCreate}>{icons.plus} Nouveau produit</button>
+          {canCreate && <button className="btn btn-primary btn-sm" onClick={openCreate}>{icons.plus} Nouveau produit</button>}
         </div>
         {loading ? <div className="loading-bar" /> : (
           <table>
@@ -1099,9 +1113,9 @@ function ProductsPage() {
                     <td>
                       <div className="action-cell">
                         <button className="btn-icon" title="Détails" onClick={() => openDetails(p)}>ℹ</button>
-                        <button className="btn-icon" title="Lots" onClick={() => openEdit(p)}>{icons.lot}</button>
-                        <button className="btn-icon" title="Modifier" onClick={() => openEdit(p)}>{icons.edit}</button>
-                        <button className="btn-icon" title="Archiver" onClick={() => handleDelete(p)}>{icons.trash}</button>
+                        {canEdit && <button className="btn-icon" title="Lots" onClick={() => openEdit(p)}>{icons.lot}</button>}
+                        {canEdit && <button className="btn-icon" title="Modifier" onClick={() => openEdit(p)}>{icons.edit}</button>}
+                        {canDelete && <button className="btn-icon" title="Archiver" onClick={() => handleDelete(p)}>{icons.trash}</button>}
                       </div>
                     </td>
                   </tr>
@@ -1299,6 +1313,17 @@ function SuppliersPage() {
   const [selected, setSelected] = useState<any>(null);
   const [form, setForm] = useState<any>({ name: "", contact: "", email: "", phone: "", address: "" });
   const notify = useContext(NotifContext);
+  const auth = useContext(AuthContext);
+
+  // ─── Vérifier que seul l'admin peut accéder à cette page ──────────
+  if (!PermissionService.canListSuppliers(auth?.user?.role as any)) {
+    return (
+      <div style={{ textAlign: "center", padding: "48px 20px", color: "var(--text-muted)" }}>
+        <div style={{ fontSize: "18px", fontWeight: "600", marginBottom: "8px" }}>Accès refusé</div>
+        <div>Vous n'avez pas les permissions nécessaires pour accéder à cette page.</div>
+      </div>
+    );
+  }
 
   const load = async () => {
     try {
@@ -1424,6 +1449,9 @@ function MovementsPage() {
   const [form, setForm] = useState<any>({ product_id: "", movement_type: "entry", quantity: "", lot_id: "", reason: "", reference_document: "" });
   const [productLots, setProductLots] = useState<any[]>([]);
   const notify = useContext(NotifContext);
+  const auth = useContext(AuthContext);
+  const userRole = auth?.user?.role || "viewer";
+  const canDelete = PermissionService.canDeleteMovement(auth?.user?.role as any);
 
   const load = async (pageNum = 1) => {
     try {
@@ -1496,12 +1524,14 @@ function MovementsPage() {
         <div className="table-toolbar">
           <span style={{ fontWeight: 600, fontSize: 14 }}>Historique des mouvements</span>
           <div style={{ flex: 1 }} />
-          <button className="btn btn-primary btn-sm" onClick={openCreate}>{icons.plus} Nouveau mouvement</button>
+          {userRole && (userRole === "admin" || userRole === "technician") && (
+            <button className="btn btn-primary btn-sm" onClick={openCreate}>{icons.plus} Nouveau mouvement</button>
+          )}
         </div>
         {loading ? <div className="loading-bar" /> : (
           <>
             <table>
-              <thead><tr><th>Type</th><th>Produit</th><th>Quantité</th><th>Utilisateur</th><th>Motif</th><th>Date</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Type</th><th>Produit</th><th>Quantité</th><th>Utilisateur</th><th>Motif</th><th>Date</th>{userRole !== "viewer" && <th>Actions</th>}</tr></thead>
               <tbody>
                 {movements.length === 0 ? (
                   <tr><td colSpan={7}><div className="empty-state"><p>Aucun mouvement</p></div></td></tr>
@@ -1522,11 +1552,15 @@ function MovementsPage() {
                       <td style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
                         {m.created_at ? new Date(m.created_at).toLocaleString("fr-FR") : "—"}
                       </td>
-                      <td>
-                        <div className="action-cell">
-                          <button className="btn-icon" title="Supprimer" onClick={() => handleDeleteMovement(m.id)}>{icons.trash}</button>
-                        </div>
-                      </td>
+                      {userRole !== "viewer" && (
+                        <td>
+                          <div className="action-cell">
+                            {canDelete && (
+                              <button className="btn-icon" title="Supprimer" onClick={() => handleDeleteMovement(m.id)}>{icons.trash}</button>
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -1640,6 +1674,17 @@ function UsersPage() {
   const [selected, setSelected] = useState<any>(null);
   const [form, setForm] = useState<any>({ name: "", email: "", password: "", role: "viewer" });
   const notify = useContext(NotifContext);
+  const auth = useContext(AuthContext);
+
+  // ─── Vérifier que seul l'admin peut accéder à cette page ──────────
+  if (!PermissionService.canListUsers(auth?.user?.role as any)) {
+    return (
+      <div style={{ textAlign: "center", padding: "48px 20px", color: "var(--text-muted)" }}>
+        <div style={{ fontSize: "18px", fontWeight: "600", marginBottom: "8px" }}>Accès refusé</div>
+        <div>Vous n'avez pas les permissions nécessaires pour accéder à cette page.</div>
+      </div>
+    );
+  }
 
   const load = async () => {
     try {
@@ -1769,6 +1814,13 @@ function CategoriesPage() {
   const [selected, setSelected] = useState<any>(null);
   const [form, setForm] = useState<any>({ name: "", description: "", color: "#2DD4A8" });
   const notify = useContext(NotifContext);
+  const auth = useContext(AuthContext);
+  const userRole = auth?.user?.role || "viewer";
+
+  // ─── Vérifier les permissions ────────────────────────────────────
+  const canCreate = PermissionService.canCreateCategory(auth?.user?.role as any);
+  const canUpdate = PermissionService.canUpdateCategory(auth?.user?.role as any);
+  const canDelete = PermissionService.canDeleteCategory(auth?.user?.role as any);
 
   const load = async () => {
     try {
@@ -1823,14 +1875,14 @@ function CategoriesPage() {
             <input placeholder="Rechercher une catégorie…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <div style={{ flex: 1 }} />
-          <button className="btn btn-primary btn-sm" onClick={() => {
+          {canCreate && <button className="btn btn-primary btn-sm" onClick={() => {
             setForm({ name: "", description: "", color: "#2DD4A8" });
             setModal("create");
-          }}>{icons.plus} Nouvelle catégorie</button>
+          }}>{icons.plus} Nouvelle catégorie</button>}
         </div>
         {loading ? <div className="loading-bar" /> : (
           <table>
-            <thead><tr><th>Couleur</th><th>Nom</th><th>Description</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Couleur</th><th>Nom</th><th>Description</th>{userRole !== "viewer" && <th>Actions</th>}</tr></thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr><td colSpan={4}><div className="empty-state"><p>Aucune catégorie trouvée</p></div></td></tr>
@@ -1839,16 +1891,18 @@ function CategoriesPage() {
                   <td><div style={{ width: 24, height: 24, borderRadius: "var(--radius)", background: c.color || "var(--bg-tertiary)" }} /></td>
                   <td className="cell-main">{c.name}</td>
                   <td style={{ fontSize: 13 }}>{c.description || "—"}</td>
-                  <td>
-                    <div className="action-cell">
-                      <button className="btn-icon" onClick={() => {
-                        setSelected(c);
-                        setForm({ name: c.name || "", description: c.description || "", color: c.color || "#2DD4A8" });
-                        setModal("edit");
-                      }}>{icons.edit}</button>
-                      <button className="btn-icon" onClick={() => handleDelete(c)}>{icons.trash}</button>
-                    </div>
-                  </td>
+                  {userRole !== "viewer" && (
+                    <td>
+                      <div className="action-cell">
+                        {canUpdate && <button className="btn-icon" onClick={() => {
+                          setSelected(c);
+                          setForm({ name: c.name || "", description: c.description || "", color: c.color || "#2DD4A8" });
+                          setModal("edit");
+                        }}>{icons.edit}</button>}
+                        {canDelete && <button className="btn-icon" onClick={() => handleDelete(c)}>{icons.trash}</button>}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -1890,6 +1944,13 @@ function LocationsPage() {
   const [selected, setSelected] = useState<any>(null);
   const [form, setForm] = useState<any>({ name: "", description: "", temperature_controlled: false });
   const notify = useContext(NotifContext);
+  const auth = useContext(AuthContext);
+  const userRole = auth?.user?.role || "viewer";
+
+  // ─── Vérifier les permissions ────────────────────────────────────
+  const canCreate = PermissionService.canCreateLocation(auth?.user?.role as any);
+  const canUpdate = PermissionService.canUpdateLocation(auth?.user?.role as any);
+  const canDelete = PermissionService.canDeleteLocation(auth?.user?.role as any);
 
   const load = async () => {
     try {
@@ -1944,14 +2005,14 @@ function LocationsPage() {
             <input placeholder="Rechercher une localisation…" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <div style={{ flex: 1 }} />
-          <button className="btn btn-primary btn-sm" onClick={() => {
+          {canCreate && <button className="btn btn-primary btn-sm" onClick={() => {
             setForm({ name: "", description: "", temperature_controlled: false });
             setModal("create");
-          }}>{icons.plus} Nouvelle localisation</button>
+          }}>{icons.plus} Nouvelle localisation</button>}
         </div>
         {loading ? <div className="loading-bar" /> : (
           <table>
-            <thead><tr><th>Nom</th><th>Description</th><th>Contrôle temp.</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Nom</th><th>Description</th><th>Contrôle temp.</th>{userRole !== "viewer" && <th>Actions</th>}</tr></thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr><td colSpan={4}><div className="empty-state"><p>Aucune localisation trouvée</p></div></td></tr>
@@ -1960,16 +2021,18 @@ function LocationsPage() {
                   <td className="cell-main">{l.name}</td>
                   <td style={{ fontSize: 13 }}>{l.description || "—"}</td>
                   <td><span className={`badge ${l.temperature_controlled ? "badge-accent" : "badge-muted"}`}>{l.temperature_controlled ? "Oui" : "Non"}</span></td>
-                  <td>
-                    <div className="action-cell">
-                      <button className="btn-icon" onClick={() => {
-                        setSelected(l);
-                        setForm({ name: l.name || "", description: l.description || "", temperature_controlled: l.temperature_controlled || false });
-                        setModal("edit");
-                      }}>{icons.edit}</button>
-                      <button className="btn-icon" onClick={() => handleDelete(l)}>{icons.trash}</button>
-                    </div>
-                  </td>
+                  {userRole !== "viewer" && (
+                    <td>
+                      <div className="action-cell">
+                        {canUpdate && <button className="btn-icon" onClick={() => {
+                          setSelected(l);
+                          setForm({ name: l.name || "", description: l.description || "", temperature_controlled: l.temperature_controlled || false });
+                          setModal("edit");
+                        }}>{icons.edit}</button>}
+                        {canDelete && <button className="btn-icon" onClick={() => handleDelete(l)}>{icons.trash}</button>}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -2113,6 +2176,27 @@ function AppShell({ user, onLogout }: { user: any; onLogout: () => void }) {
   const [page, setPage] = useState("dashboard");
   const meta = PAGE_META[page];
 
+  // ─── Filtrer la navigation en fonction du rôle ───────────────────
+  const getFilteredNav = () => {
+    const userRole = user?.role || "viewer";
+    return NAV.filter((n: any) => {
+      // Masquer les pages d'administration pour les non-administrateurs
+      if (n.key === "users" && userRole !== "admin") return false;
+      if (n.key === "suppliers" && userRole !== "admin") return false;
+      return true;
+    });
+  };
+
+  const filteredNav = getFilteredNav();
+
+  // ─── Rediriger vers le tableau de bord si l'utilisateur accède à une page interdite ───
+  useEffect(() => {
+    const userRole = user?.role || "viewer";
+    if ((page === "users" || page === "suppliers") && userRole !== "admin") {
+      setPage("dashboard");
+    }
+  }, [page, user?.role]);
+
   return (
     <div className="lab-app">
       <aside className="sidebar">
@@ -2123,7 +2207,7 @@ function AppShell({ user, onLogout }: { user: any; onLogout: () => void }) {
         </div>
         <nav className="sidebar-nav">
           <div className="sidebar-section-label">Navigation</div>
-          {NAV.map((n: any) => (
+          {filteredNav.map((n: any) => (
             <div key={n.key} className={`nav-item ${page === n.key ? "active" : ""}`} onClick={() => setPage(n.key)}>
               {n.icon}
               {n.label}

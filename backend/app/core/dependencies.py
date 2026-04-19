@@ -57,6 +57,7 @@ def get_current_user(
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Require admin role"""
     if current_user.role != UserRole.admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -65,10 +66,27 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
+def require_technician(current_user: User = Depends(get_current_user)) -> User:
+    """Require technician role (admin is NOT allowed here)"""
+    if current_user.role != UserRole.technician:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Accès réservé aux techniciens",
+        )
+    return current_user
+
+
 def require_technician_or_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Require technician or admin role"""
     if current_user.role not in (UserRole.admin, UserRole.technician):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Accès réservé aux techniciens et administrateurs",
         )
+    return current_user
+
+
+def require_viewer_or_above(current_user: User = Depends(get_current_user)) -> User:
+    """Allow all authenticated users (viewer, technician, admin)"""
+    # All authenticated users have at least viewer permissions
     return current_user
