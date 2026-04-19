@@ -48,13 +48,13 @@ export const PAGE_CONFIG: PageConfig[] = [
     allowedRoles: ['admin', 'technician'],
   },
 
-  // Admin - Accès complet
+  // Admin + Technicien - Accès lecture
   {
     path: '/suppliers',
     label: 'Fournisseurs',
     icon: '🏢',
     requiresAuth: true,
-    allowedRoles: ['admin'],
+    allowedRoles: ['admin', 'technician'],
   },
   {
     path: '/users',
