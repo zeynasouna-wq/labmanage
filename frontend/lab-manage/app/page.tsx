@@ -2209,7 +2209,7 @@ function AppShell({ user, onLogout }: { user: any; onLogout: () => void }) {
         <div className="sidebar-brand">
           <span className="brand-icon">{icons.flask}</span>
           <h1>NGStock</h1>
-          <span className="version">v1.0</span>
+          <span className="version">v1.1</span>
         </div>
         <nav className="sidebar-nav">
           <div className="sidebar-section-label">Navigation</div>
