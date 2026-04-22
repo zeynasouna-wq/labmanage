@@ -699,8 +699,9 @@ td .cell-sub { font-size: 12px; color: var(--text-muted); }
 // ─── Notification System ─────────────────────────────────────────────
 function NotifProvider({ children }: { children: React.ReactNode }) {
   const [notifs, setNotifs] = useState<any[]>([]);
+  const notifCountRef = useRef(0);
   const add = useCallback((msg: any, type: string = "success") => {
-    const id = Date.now();
+    const id = ++notifCountRef.current;
     setNotifs((n) => [...n, { id, msg, type }]);
     setTimeout(() => setNotifs((n) => n.filter((x) => x.id !== id)), 3500);
   }, []);
@@ -1453,7 +1454,7 @@ function MovementsPage() {
   const [products, setProducts] = useState<any[]>([]);
   const [searchProduct, setSearchProduct] = useState("");
   const [filteredProducts, setFilteredProducts] = useState<any[]>([]);
-  const [form, setForm] = useState<any>({ product_id: "", movement_type: "entry", quantity: "", lot_id: "", reason: "", reference_document: "" });
+  const [form, setForm] = useState<any>({ product_id: "", movement_type: "entry", quantity: "", lot_id: "", reason: "", reference_document: "", created_at: "" });
   const [productLots, setProductLots] = useState<any[]>([]);
   const notify = useContext(NotifContext);
   const auth = useContext(AuthContext);
@@ -1474,13 +1475,13 @@ function MovementsPage() {
 
   const openCreate = async () => {
     try {
-      const data = await api.get("/products/?page=1&size=100");
+      const data = await api.get("/products/?page=1&size=10000&is_active=true");
       setProducts(data.items || data || []);
       setFilteredProducts(data.items || data || []);
     } catch { setProducts([]); setFilteredProducts([]); }
     setSearchProduct("");
     setProductLots([]);
-    setForm({ product_id: "", movement_type: "entry", quantity: "", lot_id: "", reason: "", reference_document: "" });
+    setForm({ product_id: "", movement_type: "entry", quantity: "", lot_id: "", reason: "", reference_document: "", created_at: "" });
     setModal(true);
   };
 
@@ -1504,7 +1505,7 @@ function MovementsPage() {
         notify?.("Veuillez sélectionner un lot", "error");
         return;
       }
-      const payload = {
+      const payload: any = {
         product_id: parseInt(form.product_id),
         lot_id: parseInt(form.lot_id),
         movement_type: form.movement_type,
@@ -1512,6 +1513,11 @@ function MovementsPage() {
         reason: form.reason || null,
         reference_document: form.reference_document || null,
       };
+      // Si une date est saisie, l'ajouter au payload (sinon le backend utilisera la date actuelle)
+      if (form.created_at && form.created_at.trim()) {
+        // Convertir la date au format ISO avec heure actuelle
+        payload.created_at = new Date(form.created_at).toISOString();
+      }
       const result = await api.post("/movements/", payload);
       if (result || result === null) {
         notify?.("Mouvement enregistré", "success");
@@ -1604,8 +1610,20 @@ function MovementsPage() {
               value={searchProduct}
               onChange={(e) => {
                 setSearchProduct(e.target.value);
-                const s = e.target.value.toLowerCase();
-                setFilteredProducts(products.filter((p: any) => (p.name + (p.reference || "")).toLowerCase().includes(s)));
+                const s = e.target.value.toLowerCase().trim();
+                if (!s) {
+                  setFilteredProducts([]);
+                  return;
+                }
+                setFilteredProducts(products.filter((p: any) => {
+                  const searchIn = [
+                    p.name || "",
+                    p.reference || "",
+                    p.code || "",
+                    ((p.lots || []) as any[]).map((lot: any) => lot.lot_number || "").join(" "),
+                  ].join(" ").toLowerCase();
+                  return searchIn.includes(s);
+                }));
               }}
             />
             {searchProduct && filteredProducts.length > 0 && (
@@ -1630,6 +1648,11 @@ function MovementsPage() {
                     <div style={{ color: "var(--text-muted)", fontSize: 11 }}>Ref: {p.reference || "—"} | Stock: {p.current_stock || 0}</div>
                   </div>
                 ))}
+              </div>
+            )}
+            {searchProduct && filteredProducts.length === 0 && (
+              <div style={{ marginTop: 6, padding: "10px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius)", fontSize: 13, color: "var(--text-muted)", background: "var(--bg-secondary)" }}>
+                Aucun produit trouvé
               </div>
             )}
           </div>
@@ -1666,6 +1689,11 @@ function MovementsPage() {
           <div className="form-group">
             <label className="form-label">Document référence</label>
             <input className="form-input" value={form.reference_document} onChange={(e) => setForm({ ...form, reference_document: e.target.value })} placeholder="N° commande, bon de sortie…" />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Date du mouvement (optionnel)</label>
+            <input className="form-input" type="date" value={form.created_at} onChange={(e) => setForm({ ...form, created_at: e.target.value })} />
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Si vide, la date d'aujourd'hui sera utilisée</div>
           </div>
         </Modal>
       )}

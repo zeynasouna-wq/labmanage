@@ -65,15 +65,15 @@ def update_user(
     return user_service.update_user(db, user_id, data)
 
 
-@router.delete("/{user_id}", status_code=204, summary="Désactiver un utilisateur")
+@router.delete("/{user_id}", status_code=204, summary="Supprimer complètement un utilisateur")
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # ✗ UNIQUEMENT admin peut supprimer des utilisateurs
+    # ✗ UNIQUEMENT admin peut supprimer des utilisateurs (suppression complète)
     if not PermissionChecker.can_delete_user(current_user):
-        raise PermissionDenied("Seul un administrateur peut désactiver des utilisateurs")
+        raise PermissionDenied("Seul un administrateur peut supprimer des utilisateurs")
     
     user_service.delete_user(db, user_id, current_user)
 
