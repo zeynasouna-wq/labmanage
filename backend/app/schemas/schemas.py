@@ -288,6 +288,7 @@ class StockMovementCreate(BaseModel):
     quantity: int
     reason: Optional[str] = None
     reference_document: Optional[str] = None
+    created_at: Optional[datetime] = None  # Date optionnelle du mouvement
 
     @field_validator("quantity")
     @classmethod

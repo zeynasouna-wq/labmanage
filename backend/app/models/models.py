@@ -60,8 +60,8 @@ class User(Base):
 
     # Relations
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    movements = relationship("StockMovement", back_populates="user", foreign_keys="StockMovement.user_id")
-    acknowledged_alerts = relationship("Alert", back_populates="acknowledged_by")
+    movements = relationship("StockMovement", back_populates="user", foreign_keys="StockMovement.user_id", cascade="all, delete-orphan")
+    acknowledged_alerts = relationship("Alert", back_populates="acknowledged_by", cascade="all, delete")
 
 
 class Supplier(Base):
@@ -170,7 +170,7 @@ class StockMovement(Base):
     id = Column(Integer, primary_key=True, index=True)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
     lot_id = Column(Integer, ForeignKey("product_lots.id"), nullable=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 
     movement_type = Column(SAEnum(MovementType), nullable=False)
     quantity = Column(Integer, nullable=False)
@@ -198,7 +198,7 @@ class Alert(Base):
     message = Column(Text, nullable=False)
     triggered_at = Column(DateTime(timezone=True), server_default=func.now())
     acknowledged_at = Column(DateTime(timezone=True), nullable=True)
-    acknowledged_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    acknowledged_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     resolved_at = Column(DateTime(timezone=True), nullable=True)
 
     product = relationship("Product", back_populates="alerts")

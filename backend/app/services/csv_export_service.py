@@ -18,7 +18,7 @@ class CSVExportService:
     def export_all_data(db: Session) -> dict[str, str]:
         """
         Exporte toutes les données en CSV (plusieurs fichiers)
-        Retourne un dict avec clé = nom fichier, valeur = contenu CSV
+        Retourne un dict avec clé = nom fichier, valeur = contenu CSV       
         """
         exports = {
             'products.csv': CSVExportService.export_products(db),
@@ -34,11 +34,12 @@ class CSVExportService:
 
     @staticmethod
     def export_products(db: Session) -> str:
-        """Exporte les produits"""
         products = db.query(Product).all()
         
-        output = io.StringIO()
-        writer = csv.writer(output)
+        # Utiliser BytesIO avec TextIOWrapper pour contrôler l'encodage UTF-8
+        output = io.BytesIO()
+        wrapper = io.TextIOWrapper(output, encoding='utf-8', newline='')
+        writer = csv.writer(wrapper)
         
         # Headers
         writer.writerow([
@@ -66,15 +67,18 @@ class CSVExportService:
                 product.updated_at.strftime('%Y-%m-%d %H:%M:%S') if product.updated_at else '',
             ])
         
-        return output.getvalue()
+        wrapper.flush()
+        output.seek(0)
+        return output.getvalue().decode('utf-8')
 
     @staticmethod
     def export_movements(db: Session) -> str:
         """Exporte l'historique des mouvements de stock"""
         movements = db.query(StockMovement).order_by(StockMovement.created_at.desc()).all()
         
-        output = io.StringIO()
-        writer = csv.writer(output)
+        output = io.BytesIO()
+        wrapper = io.TextIOWrapper(output, encoding='utf-8', newline='')
+        writer = csv.writer(wrapper)
         
         # Headers
         writer.writerow([
@@ -100,15 +104,18 @@ class CSVExportService:
                 movement.created_at.strftime('%Y-%m-%d %H:%M:%S') if movement.created_at else '',
             ])
         
-        return output.getvalue()
+        wrapper.flush()
+        output.seek(0)
+        return output.getvalue().decode('utf-8')
 
     @staticmethod
     def export_alerts(db: Session) -> str:
         """Exporte les alertes"""
         alerts = db.query(Alert).order_by(Alert.triggered_at.desc()).all()
         
-        output = io.StringIO()
-        writer = csv.writer(output)
+        output = io.BytesIO()
+        wrapper = io.TextIOWrapper(output, encoding='utf-8', newline='')
+        writer = csv.writer(wrapper)
         
         # Headers
         writer.writerow([
@@ -131,15 +138,18 @@ class CSVExportService:
                 alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') if alert.resolved_at else '',
             ])
         
-        return output.getvalue()
+        wrapper.flush()
+        output.seek(0)
+        return output.getvalue().decode('utf-8')
 
     @staticmethod
     def export_users(db: Session) -> str:
         """Exporte les utilisateurs"""
         users = db.query(User).all()
         
-        output = io.StringIO()
-        writer = csv.writer(output)
+        output = io.BytesIO()
+        wrapper = io.TextIOWrapper(output, encoding='utf-8', newline='')
+        writer = csv.writer(wrapper)
         
         # Headers
         writer.writerow([
@@ -160,15 +170,18 @@ class CSVExportService:
                 user.created_at.strftime('%Y-%m-%d %H:%M:%S') if user.created_at else '',
             ])
         
-        return output.getvalue()
+        wrapper.flush()
+        output.seek(0)
+        return output.getvalue().decode('utf-8')
 
     @staticmethod
     def export_suppliers(db: Session) -> str:
         """Exporte les fournisseurs"""
         suppliers = db.query(Supplier).all()
         
-        output = io.StringIO()
-        writer = csv.writer(output)
+        output = io.BytesIO()
+        wrapper = io.TextIOWrapper(output, encoding='utf-8', newline='')
+        writer = csv.writer(wrapper)
         
         # Headers
         writer.writerow([
@@ -188,15 +201,18 @@ class CSVExportService:
                 supplier.created_at.strftime('%Y-%m-%d %H:%M:%S') if supplier.created_at else '',
             ])
         
-        return output.getvalue()
+        wrapper.flush()
+        output.seek(0)
+        return output.getvalue().decode('utf-8')
 
     @staticmethod
     def export_locations(db: Session) -> str:
         """Exporte les localisations"""
         locations = db.query(Location).all()
         
-        output = io.StringIO()
-        writer = csv.writer(output)
+        output = io.BytesIO()
+        wrapper = io.TextIOWrapper(output, encoding='utf-8', newline='')
+        writer = csv.writer(wrapper)
         
         # Headers
         writer.writerow([
@@ -212,15 +228,18 @@ class CSVExportService:
                 'Oui' if location.temperature_controlled else 'Non',
             ])
         
-        return output.getvalue()
+        wrapper.flush()
+        output.seek(0)
+        return output.getvalue().decode('utf-8')
 
     @staticmethod
     def export_categories(db: Session) -> str:
         """Exporte les catégories"""
         categories = db.query(Category).all()
         
-        output = io.StringIO()
-        writer = csv.writer(output)
+        output = io.BytesIO()
+        wrapper = io.TextIOWrapper(output, encoding='utf-8', newline='')
+        writer = csv.writer(wrapper)
         
         # Headers
         writer.writerow([
@@ -236,15 +255,18 @@ class CSVExportService:
                 category.color or '',
             ])
         
-        return output.getvalue()
+        wrapper.flush()
+        output.seek(0)
+        return output.getvalue().decode('utf-8')
 
     @staticmethod
     def export_product_lots(db: Session) -> str:
         """Exporte les lots de produits"""
         lots = db.query(ProductLot).order_by(ProductLot.received_at.desc()).all()
         
-        output = io.StringIO()
-        writer = csv.writer(output)
+        output = io.BytesIO()
+        wrapper = io.TextIOWrapper(output, encoding='utf-8', newline='')
+        writer = csv.writer(wrapper)
         
         # Headers
         writer.writerow([
@@ -264,12 +286,14 @@ class CSVExportService:
                 lot.notes or '',
             ])
         
-        return output.getvalue()
+        wrapper.flush()
+        output.seek(0)
+        return output.getvalue().decode('utf-8')
 
     @staticmethod
     def create_zip_export(db: Session) -> bytes:
         """
-        Crée un fichier ZIP contenant tous les CSV
+        Crée un fichier ZIP contenant tous les CSV avec encodage UTF-8
         """
         import zipfile
         
@@ -281,9 +305,11 @@ class CSVExportService:
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             for filename, content in exports.items():
                 # Ajouter chaque CSV au ZIP avec un timestamp
+                # L'encodage UTF-8 est géré automatiquement par ZipFile
                 name_without_ext = filename.replace('.csv', '')
                 zip_filename = f"{timestamp}_{filename}"
-                zip_file.writestr(zip_filename, content)
+                # content est une string en UTF-8, on l'encode explicitement
+                zip_file.writestr(zip_filename, content.encode('utf-8'))
         
         zip_buffer.seek(0)
         return zip_buffer.getvalue()

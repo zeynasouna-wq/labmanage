@@ -130,8 +130,16 @@ def update_product(db: Session, product_id: int, data: ProductUpdate) -> Product
 
 
 def delete_product(db: Session, product_id: int):
+    """
+    Supprime complètement un produit de la base de données.
+    
+    Tous les éléments associés sont supprimés en cascade :
+    - ProductLot (lots)
+    - StockMovement (mouvements de stock)
+    - Alert (alertes)
+    """
     product = get_product(db, product_id)
-    product.is_active = False
+    db.delete(product)
     db.commit()
 
 

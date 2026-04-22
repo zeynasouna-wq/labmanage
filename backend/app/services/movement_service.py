@@ -57,6 +57,7 @@ def create_movement(db: Session, data: StockMovementCreate, user: User) -> Stock
         stock_after=stock_after,
         reason=data.reason,
         reference_document=data.reference_document,
+        created_at=data.created_at or datetime.now(),  # Use provided date or current time
     )
     db.add(movement)
 
