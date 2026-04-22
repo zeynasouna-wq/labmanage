@@ -1011,8 +1011,8 @@ function ProductsPage() {
         payload.lots = (form.lots || []).map((lot: any) => ({
           lot_number: lot.lot_number,
           quantity: parseInt(lot.quantity) || 0,
-          expiry_date: lot.expiry_date || null,
-          notes: lot.notes || null,
+          expiry_date: lot.expiry_date && lot.expiry_date !== "" ? lot.expiry_date : null,
+          notes: lot.notes && lot.notes !== "" ? lot.notes : null,
         }));
         await api.post("/products/", payload);
         notify?.("Produit créé");
@@ -1032,8 +1032,8 @@ function ProductsPage() {
           await api.post(`/products/${selected.id}/lots`, {
             lot_number: lot.lot_number,
             quantity: parseInt(lot.quantity) || 0,
-            expiry_date: lot.expiry_date || null,
-            notes: lot.notes || null,
+            expiry_date: lot.expiry_date && lot.expiry_date !== "" ? lot.expiry_date : null,
+            notes: lot.notes && lot.notes !== "" ? lot.notes : null,
           });
         }
 
@@ -1459,6 +1459,7 @@ function MovementsPage() {
   const [showNewLotForm, setShowNewLotForm] = useState(false);
   const [newLotForm, setNewLotForm] = useState<any>({ lot_number: "", quantity: "", expiry_date: "", notes: "" });
   const [creatingLot, setCreatingLot] = useState(false);
+  const [productSelected, setProductSelected] = useState(false);
   const notify = useContext(NotifContext);
   const auth = useContext(AuthContext);
   const userRole = auth?.user?.role || "viewer";
@@ -1483,6 +1484,7 @@ function MovementsPage() {
       setFilteredProducts(data.items || data || []);
     } catch { setProducts([]); setFilteredProducts([]); }
     setSearchProduct("");
+    setProductSelected(false);
     setProductLots([]);
     setShowNewLotForm(false);
     setNewLotForm({ lot_number: "", quantity: "", expiry_date: "", notes: "" });
@@ -1511,26 +1513,39 @@ function MovementsPage() {
         return;
       }
       setCreatingLot(true);
-      const payload: any = {
-        product_id: parseInt(form.product_id),
-        lot_number: newLotForm.lot_number,
-        quantity: quantity,
-        expiry_date: newLotForm.expiry_date || null,
-        notes: newLotForm.notes || null,
+
+      // Créer le lot avec quantity=0 : c'est le mouvement entry qui fixera le stock
+      // (évite le double comptage lot_qty + mouvement_qty)
+      const lotPayload: any = {
+        lot_number: newLotForm.lot_number.trim(),
+        quantity: 0,
+        expiry_date: newLotForm.expiry_date && newLotForm.expiry_date.trim() !== "" ? newLotForm.expiry_date : null,
+        notes: newLotForm.notes && newLotForm.notes.trim() !== "" ? newLotForm.notes.trim() : null,
       };
-      const newLot = await api.post("/products/lots/", payload);
-      notify?.("Lot créé avec succès", "success");
-      
-      // Ajouter le lot à la liste
-      setProductLots([...productLots, newLot]);
-      
-      // Sélectionner automatiquement le nouveau lot
-      setForm({ ...form, lot_id: newLot.id });
-      
-      // Fermer le formulaire
+      const newLot = await api.post(`/products/${parseInt(form.product_id)}/lots`, lotPayload);
+
+      // Enregistrer immédiatement le mouvement entry avec la quantité saisie
+      const movementPayload: any = {
+        product_id: parseInt(form.product_id),
+        lot_id: newLot.id,
+        movement_type: "entry",
+        quantity: quantity,
+        reason: form.reason || null,
+        reference_document: form.reference_document || null,
+      };
+      if (form.created_at && form.created_at.trim()) {
+        movementPayload.created_at = new Date(form.created_at).toISOString();
+      }
+      await api.post("/movements/", movementPayload);
+
+      notify?.("Lot créé et mouvement enregistré", "success");
+
+      // Fermer le modal et rafraîchir l'historique
       setShowNewLotForm(false);
       setNewLotForm({ lot_number: "", quantity: "", expiry_date: "", notes: "" });
       setCreatingLot(false);
+      setModal(false);
+      await load();
     } catch (e: any) {
       setCreatingLot(false);
       notify?.(e?.message || "Erreur création lot", "error");
@@ -1653,6 +1668,7 @@ function MovementsPage() {
               value={searchProduct}
               onChange={(e) => {
                 setSearchProduct(e.target.value);
+                setProductSelected(false);
                 const s = e.target.value.toLowerCase().trim();
                 if (!s) {
                   setFilteredProducts([]);
@@ -1677,6 +1693,7 @@ function MovementsPage() {
                     onClick={async () => {
                       setForm({ ...form, product_id: p.id, lot_id: "" });
                       setSearchProduct(p.name);
+                      setProductSelected(true);
                       setFilteredProducts([]);
                       try {
                         const d = await api.get(`/products/${p.id}`);
@@ -1693,7 +1710,7 @@ function MovementsPage() {
                 ))}
               </div>
             )}
-            {searchProduct && filteredProducts.length === 0 && (
+            {searchProduct && !productSelected && filteredProducts.length === 0 && (
               <div style={{ marginTop: 6, padding: "10px 12px", border: "1px solid var(--border)", borderRadius: "var(--radius)", fontSize: 13, color: "var(--text-muted)", background: "var(--bg-secondary)" }}>
                 Aucun produit trouvé
               </div>

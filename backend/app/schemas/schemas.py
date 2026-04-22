@@ -159,7 +159,7 @@ class ProductLotCreate(BaseModel):
     @field_validator("quantity")
     @classmethod
     def quantity_positive(cls, v):
-        if v <= 0:
+        if v < 0:
             raise ValueError("La quantité du lot doit être positive")
         return v
 
