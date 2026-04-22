@@ -86,7 +86,12 @@ const api = {
       }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || `Erreur ${res.status}`);
+        // FastAPI validation errors return detail as an array
+        let detail = err.detail;
+        if (Array.isArray(detail)) {
+          detail = detail.map((e: any) => `${e.loc?.join(".")}: ${e.msg}`).join(" | ");
+        }
+        throw new Error(detail || `Erreur ${res.status}`);
       }
       if (res.status === 204) return null;
       return res.json();
@@ -160,8 +165,6 @@ const icons = {
 
 // ─── Styles ──────────────────────────────────────────────────────────
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap');
-
 :root {
   --bg-primary: #0B0E13;
   --bg-secondary: #111620;
@@ -1457,7 +1460,9 @@ function MovementsPage() {
   const [form, setForm] = useState<any>({ product_id: "", movement_type: "entry", quantity: "", lot_id: "", reason: "", reference_document: "", created_at: "" });
   const [productLots, setProductLots] = useState<any[]>([]);
   const [showNewLotForm, setShowNewLotForm] = useState(false);
-  const [newLotForm, setNewLotForm] = useState<any>({ lot_number: "", quantity: "", expiry_date: "", notes: "" });
+  const todayStr = () => new Date().toISOString().split("T")[0];
+  const emptyLotRow = () => ({ lot_number: "", quantity: "", expiry_date: "", notes: "", created_at: todayStr() });
+  const [newLots, setNewLots] = useState<any[]>([emptyLotRow()]);
   const [creatingLot, setCreatingLot] = useState(false);
   const [productSelected, setProductSelected] = useState(false);
   const notify = useContext(NotifContext);
@@ -1487,8 +1492,8 @@ function MovementsPage() {
     setProductSelected(false);
     setProductLots([]);
     setShowNewLotForm(false);
-    setNewLotForm({ lot_number: "", quantity: "", expiry_date: "", notes: "" });
-    setForm({ product_id: "", movement_type: "entry", quantity: "", lot_id: "", reason: "", reference_document: "", created_at: "" });
+    setNewLots([{ lot_number: "", quantity: "", expiry_date: "", notes: "", created_at: new Date().toISOString().split("T")[0] }]);
+    setForm({ product_id: "", movement_type: "entry", quantity: "", lot_id: "", reason: "", reference_document: "", created_at: new Date().toISOString().split("T")[0] });
     setModal(true);
   };
 
@@ -1501,48 +1506,50 @@ function MovementsPage() {
     } catch (e: any) { notify?.(e?.message || "Erreur suppression", "error"); }
   };
 
-  const handleCreateLot = async () => {
+  const handleCreateLots = async () => {
+    // Validate all rows
+    for (let i = 0; i < newLots.length; i++) {
+      const lot = newLots[i];
+      if (!lot.lot_number || !lot.lot_number.trim()) {
+        notify?.(`Lot ${i + 1} : le numéro de lot est obligatoire`, "error");
+        return;
+      }
+      const qty = parseInt(lot.quantity);
+      if (!qty || qty <= 0 || isNaN(qty)) {
+        notify?.(`Lot ${i + 1} : la quantité doit être supérieure à 0`, "error");
+        return;
+      }
+    }
+    setCreatingLot(true);
     try {
-      if (!newLotForm.lot_number || !newLotForm.lot_number.trim()) {
-        notify?.("Le numéro de lot est obligatoire", "error");
-        return;
+      for (const lot of newLots) {
+        const qty = parseInt(lot.quantity);
+        // Create lot with quantity=0 to avoid double counting with entry movement
+        const lotPayload: any = {
+          lot_number: lot.lot_number.trim(),
+          quantity: 0,
+          expiry_date: lot.expiry_date && lot.expiry_date.trim() !== "" ? lot.expiry_date : null,
+          notes: lot.notes && lot.notes.trim() !== "" ? lot.notes.trim() : null,
+        };
+        const newLot = await api.post(`/products/${parseInt(form.product_id)}/lots`, lotPayload);
+        // Entry movement to set the stock
+        const movementPayload: any = {
+          product_id: parseInt(form.product_id),
+          lot_id: newLot.id,
+          movement_type: "entry",
+          quantity: qty,
+          reason: form.reason || null,
+          reference_document: form.reference_document || null,
+          // Use lot-level date if set, otherwise today
+          created_at: lot.created_at && lot.created_at.trim() !== ""
+            ? new Date(lot.created_at).toISOString()
+            : new Date().toISOString(),
+        };
+        await api.post("/movements/", movementPayload);
       }
-      const quantity = parseInt(newLotForm.quantity);
-      if (!quantity || quantity <= 0 || isNaN(quantity)) {
-        notify?.("La quantité doit être supérieure à 0", "error");
-        return;
-      }
-      setCreatingLot(true);
-
-      // Créer le lot avec quantity=0 : c'est le mouvement entry qui fixera le stock
-      // (évite le double comptage lot_qty + mouvement_qty)
-      const lotPayload: any = {
-        lot_number: newLotForm.lot_number.trim(),
-        quantity: 0,
-        expiry_date: newLotForm.expiry_date && newLotForm.expiry_date.trim() !== "" ? newLotForm.expiry_date : null,
-        notes: newLotForm.notes && newLotForm.notes.trim() !== "" ? newLotForm.notes.trim() : null,
-      };
-      const newLot = await api.post(`/products/${parseInt(form.product_id)}/lots`, lotPayload);
-
-      // Enregistrer immédiatement le mouvement entry avec la quantité saisie
-      const movementPayload: any = {
-        product_id: parseInt(form.product_id),
-        lot_id: newLot.id,
-        movement_type: "entry",
-        quantity: quantity,
-        reason: form.reason || null,
-        reference_document: form.reference_document || null,
-      };
-      if (form.created_at && form.created_at.trim()) {
-        movementPayload.created_at = new Date(form.created_at).toISOString();
-      }
-      await api.post("/movements/", movementPayload);
-
-      notify?.("Lot créé et mouvement enregistré", "success");
-
-      // Fermer le modal et rafraîchir l'historique
+      notify?.(`${newLots.length} lot(s) créé(s) et mouvements enregistrés`, "success");
       setShowNewLotForm(false);
-      setNewLotForm({ lot_number: "", quantity: "", expiry_date: "", notes: "" });
+      setNewLots([{ lot_number: "", quantity: "", expiry_date: "", notes: "", created_at: new Date().toISOString().split("T")[0] }]);
       setCreatingLot(false);
       setModal(false);
       await load();
@@ -1570,12 +1577,11 @@ function MovementsPage() {
         quantity: quantity,
         reason: form.reason || null,
         reference_document: form.reference_document || null,
+        // Toujours envoyer la date — pré-remplie avec aujourd'hui si non modifiée
+        created_at: form.created_at && form.created_at.trim()
+          ? new Date(form.created_at).toISOString()
+          : new Date().toISOString(),
       };
-      // Si une date est saisie, l'ajouter au payload (sinon le backend utilisera la date actuelle)
-      if (form.created_at && form.created_at.trim()) {
-        // Convertir la date au format ISO avec heure actuelle
-        payload.created_at = new Date(form.created_at).toISOString();
-      }
       const result = await api.post("/movements/", payload);
       if (result || result === null) {
         notify?.("Mouvement enregistré", "success");
@@ -1724,28 +1730,62 @@ function MovementsPage() {
             )}
           </div>
           {showNewLotForm && form.movement_type === "entry" && form.product_id && (
-            <div style={{ padding: "16px", border: "2px solid var(--accent)", borderRadius: "var(--radius)", background: "rgba(88, 166, 255, 0.05)", marginBottom: 16 }}>
-              <div style={{ fontWeight: 600, color: "var(--accent)", marginBottom: 12 }}>➕ Créer un nouveau lot</div>
-              <div className="form-group">
-                <label className="form-label">Numéro de lot *</label>
-                <input className="form-input" type="text" placeholder="LOT-2024-001" value={newLotForm.lot_number} onChange={(e) => setNewLotForm({ ...newLotForm, lot_number: e.target.value })} />
+            <div style={{ padding: "16px", border: "2px solid var(--accent)", borderRadius: "var(--radius)", background: "rgba(45, 212, 168, 0.04)", marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <div style={{ fontWeight: 600, color: "var(--accent)", fontSize: 14 }}>➕ Nouveaux lots</div>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setNewLots([...newLots, { lot_number: "", quantity: "", expiry_date: "", notes: "", created_at: new Date().toISOString().split("T")[0] }])}
+                  style={{ display: "flex", alignItems: "center", gap: 4 }}
+                >
+                  {icons.plus} Ajouter un lot
+                </button>
               </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">Quantité *</label>
-                  <input className="form-input" type="number" min="1" placeholder="100" value={newLotForm.quantity} onChange={(e) => setNewLotForm({ ...newLotForm, quantity: e.target.value })} />
+              {newLots.map((lot, idx) => (
+                <div key={idx} style={{ marginBottom: 12, padding: "12px", background: "var(--bg-tertiary)", borderRadius: "var(--radius)", border: "1px solid var(--border)", position: "relative" }}>
+                  {newLots.length > 1 && (
+                    <button
+                      onClick={() => setNewLots(newLots.filter((_, i) => i !== idx))}
+                      style={{ position: "absolute", top: 8, right: 8, background: "none", border: "none", cursor: "pointer", color: "var(--danger)", display: "flex" }}
+                      title="Supprimer ce lot"
+                    >
+                      {icons.close}
+                    </button>
+                  )}
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>LOT {idx + 1}</div>
+                  <div className="form-row" style={{ marginBottom: 8 }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">N° de lot *</label>
+                      <input className="form-input" type="text" placeholder="LOT-2024-001" value={lot.lot_number}
+                        onChange={(e) => setNewLots(newLots.map((l, i) => i === idx ? { ...l, lot_number: e.target.value } : l))} />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Quantité *</label>
+                      <input className="form-input" type="number" min="1" placeholder="100" value={lot.quantity}
+                        onChange={(e) => setNewLots(newLots.map((l, i) => i === idx ? { ...l, quantity: e.target.value } : l))} />
+                    </div>
+                  </div>
+                  <div className="form-row" style={{ marginBottom: 8 }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Date d'expiration</label>
+                      <input className="form-input" type="date" value={lot.expiry_date}
+                        onChange={(e) => setNewLots(newLots.map((l, i) => i === idx ? { ...l, expiry_date: e.target.value } : l))} />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">Date de réception</label>
+                      <input className="form-input" type="date" value={lot.created_at}
+                        onChange={(e) => setNewLots(newLots.map((l, i) => i === idx ? { ...l, created_at: e.target.value } : l))} />
+                    </div>
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Notes</label>
+                    <input className="form-input" type="text" placeholder="Observations…" value={lot.notes}
+                      onChange={(e) => setNewLots(newLots.map((l, i) => i === idx ? { ...l, notes: e.target.value } : l))} />
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Date d'expiration</label>
-                  <input className="form-input" type="date" value={newLotForm.expiry_date} onChange={(e) => setNewLotForm({ ...newLotForm, expiry_date: e.target.value })} />
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Notes</label>
-                <input className="form-input" type="text" placeholder="Observations ou remarques…" value={newLotForm.notes} onChange={(e) => setNewLotForm({ ...newLotForm, notes: e.target.value })} />
-              </div>
-              <button className="btn btn-accent" onClick={handleCreateLot} disabled={creatingLot} style={{ width: "100%" }}>
-                {creatingLot ? "Création en cours..." : "Créer le lot"}
+              ))}
+              <button className="btn btn-primary" onClick={handleCreateLots} disabled={creatingLot} style={{ width: "100%" }}>
+                {creatingLot ? "Création en cours..." : `Créer ${newLots.length} lot${newLots.length > 1 ? "s" : ""}`}
               </button>
             </div>
           )}
@@ -1784,9 +1824,8 @@ function MovementsPage() {
             <input className="form-input" value={form.reference_document} onChange={(e) => setForm({ ...form, reference_document: e.target.value })} placeholder="N° commande, bon de sortie…" />
           </div>
           <div className="form-group">
-            <label className="form-label">Date du mouvement (optionnel)</label>
+            <label className="form-label">Date de réception *</label>
             <input className="form-input" type="date" value={form.created_at} onChange={(e) => setForm({ ...form, created_at: e.target.value })} />
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Si vide, la date d'aujourd'hui sera utilisée</div>
           </div>
         </Modal>
       )}
@@ -2416,7 +2455,12 @@ export default function App() {
   return (
     <AuthContext.Provider value={{ user, login, logout }}>
       <NotifProvider>
+        <>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
         <style>{CSS}</style>
+      </>
         {user ? <AppShell user={user} onLogout={logout} /> : <LoginPage />}
       </NotifProvider>
     </AuthContext.Provider>
