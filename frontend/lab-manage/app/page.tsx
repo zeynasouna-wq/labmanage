@@ -803,8 +803,8 @@ function DashboardPage() {
     (async () => {
       try {
         const [products, suppliers, movements] = await Promise.all([
-          api.get("/products/?page=1&size=100"),
-          api.get("/suppliers/?page=1&size=100"),
+          api.get("/products/?page=1&size=10000"),
+          api.get("/suppliers/?page=1&size=10000"),
           api.get("/movements/?page=1&size=5"),
         ]);
         const prodList = products.items || products || [];
