@@ -1456,12 +1456,9 @@ function MovementsPage() {
   const [filteredProducts, setFilteredProducts] = useState<any[]>([]);
   const [form, setForm] = useState<any>({ product_id: "", movement_type: "entry", quantity: "", lot_id: "", reason: "", reference_document: "", created_at: "" });
   const [productLots, setProductLots] = useState<any[]>([]);
-  const [showNewProductForm, setShowNewProductForm] = useState(false);
-  const [newProductForm, setNewProductForm] = useState<any>({ name: "", reference: "", description: "", supplier_id: "", location_id: "", category_id: "", minimum_stock: "0" });
-  const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [locations, setLocations] = useState<any[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
-  const [creatingProduct, setCreatingProduct] = useState(false);
+  const [showNewLotForm, setShowNewLotForm] = useState(false);
+  const [newLotForm, setNewLotForm] = useState<any>({ lot_number: "", quantity: "", expiry_date: "", notes: "" });
+  const [creatingLot, setCreatingLot] = useState(false);
   const notify = useContext(NotifContext);
   const auth = useContext(AuthContext);
   const userRole = auth?.user?.role || "viewer";
@@ -1481,22 +1478,14 @@ function MovementsPage() {
 
   const openCreate = async () => {
     try {
-      const [productsData, suppliersData, locationsData, categoriesData] = await Promise.all([
-        api.get("/products/?page=1&size=10000&is_active=true"),
-        api.get("/suppliers/?page=1&size=10000").catch(() => ({ items: [] })),
-        api.get("/locations/?skip=0&limit=10000").catch(() => ({ items: [] })),
-        api.get("/categories/?skip=0&limit=10000").catch(() => ({ items: [] })),
-      ]);
-      setProducts(productsData.items || productsData || []);
-      setFilteredProducts(productsData.items || productsData || []);
-      setSuppliers(suppliersData.items || suppliersData || []);
-      setLocations(locationsData.items || locationsData || []);
-      setCategories(categoriesData.items || categoriesData || []);
+      const data = await api.get("/products/?page=1&size=10000&is_active=true");
+      setProducts(data.items || data || []);
+      setFilteredProducts(data.items || data || []);
     } catch { setProducts([]); setFilteredProducts([]); }
     setSearchProduct("");
     setProductLots([]);
-    setShowNewProductForm(false);
-    setNewProductForm({ name: "", reference: "", description: "", supplier_id: "", location_id: "", category_id: "", minimum_stock: "0" });
+    setShowNewLotForm(false);
+    setNewLotForm({ lot_number: "", quantity: "", expiry_date: "", notes: "" });
     setForm({ product_id: "", movement_type: "entry", quantity: "", lot_id: "", reason: "", reference_document: "", created_at: "" });
     setModal(true);
   };
@@ -1510,52 +1499,41 @@ function MovementsPage() {
     } catch (e: any) { notify?.(e?.message || "Erreur suppression", "error"); }
   };
 
-  const handleCreateProduct = async () => {
+  const handleCreateLot = async () => {
     try {
-      if (!newProductForm.reference || !newProductForm.reference.trim()) {
-        notify?.("La référence du produit est obligatoire", "error");
+      if (!newLotForm.lot_number || !newLotForm.lot_number.trim()) {
+        notify?.("Le numéro de lot est obligatoire", "error");
         return;
       }
-      if (!newProductForm.name || !newProductForm.name.trim()) {
-        notify?.("Le nom du produit est obligatoire", "error");
+      const quantity = parseInt(newLotForm.quantity);
+      if (!quantity || quantity <= 0 || isNaN(quantity)) {
+        notify?.("La quantité doit être supérieure à 0", "error");
         return;
       }
-      setCreatingProduct(true);
+      setCreatingLot(true);
       const payload: any = {
-        name: newProductForm.name,
-        reference: newProductForm.reference,
-        description: newProductForm.description || "",
-        minimum_stock: parseInt(newProductForm.minimum_stock) || 0,
-        supplier_id: newProductForm.supplier_id ? parseInt(newProductForm.supplier_id) : null,
-        location_id: newProductForm.location_id ? parseInt(newProductForm.location_id) : null,
-        category_id: newProductForm.category_id ? parseInt(newProductForm.category_id) : null,
-        lots: [],
+        product_id: parseInt(form.product_id),
+        lot_number: newLotForm.lot_number,
+        quantity: quantity,
+        expiry_date: newLotForm.expiry_date || null,
+        notes: newLotForm.notes || null,
       };
-      const newProduct = await api.post("/products/", payload);
-      notify?.("Produit créé avec succès", "success");
+      const newLot = await api.post("/products/lots/", payload);
+      notify?.("Lot créé avec succès", "success");
       
-      // Ajouter le produit à la liste
-      setProducts([...products, newProduct]);
-      setFilteredProducts([...filteredProducts, newProduct]);
+      // Ajouter le lot à la liste
+      setProductLots([...productLots, newLot]);
       
-      // Sélectionner automatiquement le nouveau produit
-      setForm({ ...form, product_id: newProduct.id, lot_id: "" });
-      setSearchProduct(newProduct.name);
-      setFilteredProducts([]);
+      // Sélectionner automatiquement le nouveau lot
+      setForm({ ...form, lot_id: newLot.id });
       
-      // Charger les lots du nouveau produit
-      try {
-        const productData = await api.get(`/products/${newProduct.id}`);
-        setProductLots(productData.lots || []);
-      } catch { setProductLots([]); }
-      
-      // Fermer le formulaire de création
-      setShowNewProductForm(false);
-      setNewProductForm({ name: "", reference: "", description: "", supplier_id: "", location_id: "", category_id: "", minimum_stock: "0" });
-      setCreatingProduct(false);
+      // Fermer le formulaire
+      setShowNewLotForm(false);
+      setNewLotForm({ lot_number: "", quantity: "", expiry_date: "", notes: "" });
+      setCreatingLot(false);
     } catch (e: any) {
-      setCreatingProduct(false);
-      notify?.(e?.message || "Erreur création produit", "error");
+      setCreatingLot(false);
+      notify?.(e?.message || "Erreur création lot", "error");
     }
   };
 
@@ -1720,60 +1698,37 @@ function MovementsPage() {
                 Aucun produit trouvé
               </div>
             )}
-            {form.movement_type === "entry" && !form.product_id && (
+            {form.movement_type === "entry" && form.product_id && (
               <div style={{ marginTop: 10 }}>
-                <button className="btn btn-secondary btn-sm" onClick={() => setShowNewProductForm(!showNewProductForm)} style={{ width: "100%" }}>
-                  {icons.plus} {showNewProductForm ? "Annuler" : "Ajouter un nouveau produit"}
+                <button className="btn btn-secondary btn-sm" onClick={() => setShowNewLotForm(!showNewLotForm)} style={{ width: "100%" }}>
+                  {icons.plus} {showNewLotForm ? "Annuler" : "Ajouter un nouveau lot"}
                 </button>
               </div>
             )}
           </div>
-          {showNewProductForm && form.movement_type === "entry" && (
+          {showNewLotForm && form.movement_type === "entry" && form.product_id && (
             <div style={{ padding: "16px", border: "2px solid var(--accent)", borderRadius: "var(--radius)", background: "rgba(88, 166, 255, 0.05)", marginBottom: 16 }}>
-              <div style={{ fontWeight: 600, color: "var(--accent)", marginBottom: 12 }}>➕ Créer un nouveau produit</div>
+              <div style={{ fontWeight: 600, color: "var(--accent)", marginBottom: 12 }}>➕ Créer un nouveau lot</div>
               <div className="form-group">
-                <label className="form-label">Référence *</label>
-                <input className="form-input" type="text" placeholder="REF-001" value={newProductForm.reference} onChange={(e) => setNewProductForm({ ...newProductForm, reference: e.target.value })} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Nom du produit *</label>
-                <input className="form-input" type="text" placeholder="Ex: Acide sulfurique H2SO4" value={newProductForm.name} onChange={(e) => setNewProductForm({ ...newProductForm, name: e.target.value })} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Description</label>
-                <input className="form-input" type="text" placeholder="Description détaillée" value={newProductForm.description} onChange={(e) => setNewProductForm({ ...newProductForm, description: e.target.value })} />
+                <label className="form-label">Numéro de lot *</label>
+                <input className="form-input" type="text" placeholder="LOT-2024-001" value={newLotForm.lot_number} onChange={(e) => setNewLotForm({ ...newLotForm, lot_number: e.target.value })} />
               </div>
               <div className="form-row">
                 <div className="form-group">
-                  <label className="form-label">Fournisseur</label>
-                  <select className="form-input form-select" value={newProductForm.supplier_id} onChange={(e) => setNewProductForm({ ...newProductForm, supplier_id: e.target.value })}>
-                    <option value="">Non défini</option>
-                    {suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
+                  <label className="form-label">Quantité *</label>
+                  <input className="form-input" type="number" min="1" placeholder="100" value={newLotForm.quantity} onChange={(e) => setNewLotForm({ ...newLotForm, quantity: e.target.value })} />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Emplacement</label>
-                  <select className="form-input form-select" value={newProductForm.location_id} onChange={(e) => setNewProductForm({ ...newProductForm, location_id: e.target.value })}>
-                    <option value="">Non défini</option>
-                    {locations.map((l: any) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                  </select>
+                  <label className="form-label">Date d'expiration</label>
+                  <input className="form-input" type="date" value={newLotForm.expiry_date} onChange={(e) => setNewLotForm({ ...newLotForm, expiry_date: e.target.value })} />
                 </div>
               </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label className="form-label">Catégorie</label>
-                  <select className="form-input form-select" value={newProductForm.category_id} onChange={(e) => setNewProductForm({ ...newProductForm, category_id: e.target.value })}>
-                    <option value="">Non défini</option>
-                    {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Stock minimum</label>
-                  <input className="form-input" type="number" min="0" value={newProductForm.minimum_stock} onChange={(e) => setNewProductForm({ ...newProductForm, minimum_stock: e.target.value })} />
-                </div>
+              <div className="form-group">
+                <label className="form-label">Notes</label>
+                <input className="form-input" type="text" placeholder="Observations ou remarques…" value={newLotForm.notes} onChange={(e) => setNewLotForm({ ...newLotForm, notes: e.target.value })} />
               </div>
-              <button className="btn btn-accent" onClick={handleCreateProduct} disabled={creatingProduct} style={{ width: "100%" }}>
-                {creatingProduct ? "Création en cours..." : "Créer le produit"}
+              <button className="btn btn-accent" onClick={handleCreateLot} disabled={creatingLot} style={{ width: "100%" }}>
+                {creatingLot ? "Création en cours..." : "Créer le lot"}
               </button>
             </div>
           )}
