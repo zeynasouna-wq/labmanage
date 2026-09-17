@@ -130,9 +130,11 @@ Base de test :
 
 ## Frontend — architecture
 
-Racine du projet frontend : `frontend/lab-manage/` (pas de dossier `src/` pour le moment — c'est la cible du refactor).
+Racine du projet frontend : `frontend/lab-manage/`, avec un dossier `src/` (`src/app/`, `src/components/`, `src/lib/` — déplacement effectué en phase 4).
 
-**État actuel** : tout le métier (Dashboard, Products, Suppliers, Movements, Users, Categories, Locations) est défini comme des fonctions internes à `frontend/lab-manage/app/page.tsx` (~2500 lignes), chacune avec son propre appel `fetch`. Il n'y a ni `src/features/`, ni `src/components/ui/`, ni client HTTP unique.
+**État actuel** : tout le métier (Dashboard, Products, Suppliers, Movements, Users, Categories, Locations) est encore défini comme des fonctions internes à `frontend/lab-manage/src/app/page.tsx` (~2500 lignes), chacune avec son propre appel `fetch`. Il n'y a pas encore de `src/features/`, ni `src/components/ui/`, ni client HTTP unique — extraction en cours, un domaine à la fois (voir `docs/REFACTOR_LOG.md`).
+
+**Code mort connu, non touché** : `src/components/{Navigation,ProtectedActions,RoleGuard,RoleProtectedPage}.tsx` et `src/lib/{navigation,rbac}.ts` (788 lignes) forment un système RBAC alternatif jamais branché à l'application réelle (qui utilise `src/lib/permissions.ts` directement). Décision utilisateur (2026-09-17) : laissés en l'état pour l'instant.
 
 Cible :
 - `src/app/` : pages et layouts uniquement. Une page assemble des composants, elle ne contient ni `fetch` ni logique.

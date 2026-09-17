@@ -295,3 +295,35 @@ Restent, hors périmètre de cette phase (décisions déjà actées, cf. entrée
 - `alerts` et `dashboard` : code mort non branché, réservé à un `feat` séparé (décision utilisateur, phase 0).
 - Bugs pré-existants découverts et documentés sans être corrigés : migrations Alembic no-op (`create_all` non retiré), `Settings` qui plante sur une clé `.env` non déclarée, doublons de nom non gérés sur `locations`/`categories` (crash 500 au lieu d'un 400 propre, contrairement à `suppliers`).
 - Frontend (phase 4) : aucun fichier de `frontend/lab-manage/` touché à ce stade.
+
+---
+
+## Phase 4 — Frontend (`refactor/frontend`)
+
+**Date** : 2026-09-17
+
+**Blocage npm/Node résolu** : `npm`/Node ≥ 20 étaient absents de l'environnement d'exécution depuis la phase 1 (seul `node` v12.22.9 via apt). Installé localement (sans `sudo`) : Node 22.14.0 LTS téléchargé depuis nodejs.org et extrait dans `~/.local` (binaire, hors du dépôt). `npm install` a fait dériver `package-lock.json` (mises à jour mineures de dépendances transitives) — reverté, puis `npm ci` utilisé à la place pour installer exactement les versions verrouillées sans modifier le lockfile.
+
+**Baseline établie avant toute modification** :
+- `npm run build` : passe (Next.js 16.2.3, Turbopack), avertissement pré-existant sur la présence de deux lockfiles (`frontend/package-lock.json` quasi vide + `frontend/lab-manage/package-lock.json`) faisant que Next.js infère la mauvaise racine de workspace — non corrigé (config `turbopack.root` à ajouter si besoin, hors périmètre de cette tâche).
+- `npm run lint` : **13 erreurs, 29 avertissements** sur le code non modifié — donc `npm run lint` échoue déjà (code de sortie non-zéro) sur `main`, avant tout refactor. La plupart des erreurs viennent de la règle React 19 `react-hooks/set-state-in-effect` (`setState` synchrone dans un `useEffect`, dans `app/page.tsx`, `RoleProtectedPage.tsx`). Ces 13/29 sont la référence : zéro nouveau problème ne doit apparaître dans les fichiers touchés par ce refactor.
+
+**BUG/CODE MORT DÉCOUVERT — tout un système RBAC alternatif jamais branché** :
+
+En lisant `app/page.tsx` en entier (2467 lignes) avant extraction, constat que l'application réelle implémente sa propre navigation (`NAV`, `PAGE_META` en dur dans `page.tsx`) et son propre contrôle d'accès via `lib/permissions.ts` (`PermissionService`), **sans jamais utiliser** :
+- `components/Navigation.tsx`, `ProtectedActions.tsx`, `RoleGuard.tsx`, `RoleProtectedPage.tsx`
+- `lib/navigation.ts` (`NavigationService`)
+- `lib/rbac.ts` (barrel qui réexporte les 5 fichiers ci-dessus — lui-même jamais importé)
+
+788 lignes au total. Tous créés dans le commit `1c5cd76` (« RBAC + restrictions roles + nettoyage projet », 2026-04-19), avec deux commits de suivi sur `RoleGuard.tsx` et `lib/navigation.ts`. Contrairement à `alert_service.py`/`dashboard_service.py` côté backend, rien n'indique un entretien récent ou une intention de branchement futur — plutôt une architecture RBAC alternative construite puis abandonnée au profit de l'implémentation plus simple directement dans `page.tsx`.
+
+**Décision de l'utilisateur (2026-09-17)** : laisser ces 6 fichiers en l'état pour l'instant, ne pas les supprimer ni les brancher. Décision à revisiter en fin de refactor frontend.
+
+**Fait** :
+1. **Déplacement structurel vers `src/`** (mécanique, avant toute extraction de domaine) :
+   - `app/` → `src/app/`, `components/` → `src/components/`, `lib/` → `src/lib/` (`git mv`, historique préservé).
+   - `tsconfig.json` : `"@/*": ["./*"]` → `"@/*": ["./src/*"]`.
+   - `public/`, `next.config.ts`, `eslint.config.mjs`, `postcss.config.mjs`, `package.json` inchangés (restent à la racine, convention Next.js).
+   - Vérifié : `npm run build` passe, `npm run lint` renvoie exactement 13 erreurs / 29 avertissements (identique à la baseline, zéro régression).
+
+**À faire** : créer `src/lib/api-client.ts`, puis extraire chaque domaine de `src/app/page.tsx` vers `src/features/<domaine>/`, un à la fois, avec vérification `npm run build` après chaque extraction.
