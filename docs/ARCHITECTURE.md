@@ -124,11 +124,13 @@ Un dossier par domaine backend correspondant : `auth`, `users`, `suppliers`, `lo
 
 ## Limites connues (documentées en détail dans `docs/REFACTOR_LOG.md`)
 
-- **Migrations Alembic no-op** : `alembic upgrade head` ne crée aucune table (les 3 migrations existantes ont un `upgrade()` vide ou commenté). Le schéma de production n'existe que grâce à `Base.metadata.create_all()` dans `main.py`. `create_all` n'a donc pas été retiré.
-- **`Settings` plante sur une clé `.env` non déclarée** : `app/core/config.py` n'a pas `extra="ignore"` ; copier littéralement `.env.example` vers `.env` fait planter l'app (`ALERT_CHECK_INTERVAL_HOURS`, `EXPIRY_ALERT_DAYS_BEFORE` sont concernées).
-- **Doublons de nom non gérés** sur `locations`/`categories` : contrairement à `suppliers`, aucune vérification applicative avant insertion — un nom dupliqué provoque un `IntegrityError` non intercepté (crash 500) au lieu d'un 400 propre.
-- **Modèles SQLAlchemy non éclatés par domaine** : `app/models/models.py` reste un fichier unique partagé, référencé par tous les modules. Un éclatement complet nécessiterait de toucher ~15 fichiers d'un coup ; reporté.
+- **Migrations Alembic no-op** : `alembic upgrade head` ne crée aucune table (les 3 migrations existantes ont un `upgrade()` vide ou commenté). Le schéma de production n'existe que grâce à `Base.metadata.create_all()` dans `main.py`. `create_all` n'a donc pas été retiré. **Toujours ouvert.**
+- **Doublons de nom non gérés** sur `locations`/`categories` : contrairement à `suppliers`, aucune vérification applicative avant insertion — un nom dupliqué provoque un `IntegrityError` non intercepté (crash 500) au lieu d'un 400 propre. **Toujours ouvert.**
+- **Modèles SQLAlchemy non éclatés par domaine** : `app/models/models.py` reste un fichier unique partagé, référencé par tous les modules. Un éclatement complet nécessiterait de toucher ~15 fichiers d'un coup ; reporté. **Toujours ouvert.**
 - **Code mort non supprimé** (décisions utilisateur explicites, à revisiter) :
   - Backend : `alert_service.py`, `dashboard_service.py` — jamais branchés, prévus pour un `feat` futur (`modules/alerts/`, `modules/dashboard/`).
   - Frontend : `src/components/{Navigation,ProtectedActions,RoleGuard,RoleProtectedPage}.tsx`, `src/lib/{navigation,rbac}.ts` — système RBAC alternatif jamais branché (788 lignes), `PermissionService` (`lib/permissions.ts`) fait foi.
-- **Deux `package-lock.json`** (`frontend/package-lock.json` quasi vide + `frontend/lab-manage/package-lock.json`) font que Next.js infère la mauvaise racine de workspace (avertissement au build, sans impact fonctionnel constaté).
+
+**Corrigés depuis** (sur la branche `refactor/complete`, après la clôture des phases 0–5) :
+- ~~`Settings` plantait sur une clé `.env` non déclarée~~ : corrigé (`extra="ignore"` + `TEST_DATABASE_URL`/`ALERT_CHECK_INTERVAL_HOURS`/`EXPIRY_ALERT_DAYS_BEFORE` déclarés explicitement dans `Settings`).
+- ~~Deux `package-lock.json` faisaient inférer la mauvaise racine de workspace~~ : corrigé (`frontend/package-lock.json` supprimé, `turbopack.root` fixé explicitement dans `next.config.ts`).

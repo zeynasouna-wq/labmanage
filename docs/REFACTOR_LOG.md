@@ -357,3 +357,20 @@ En lisant `app/page.tsx` en entier (2467 lignes) avant extraction, constat que l
 - Introduire `api.ts`/`hooks/`/`types.ts` par domaine si l'équipe veut aller plus loin que le simple découpage en fichiers (actuellement chaque feature appelle encore `@/lib/api-client` directement depuis son composant, comme le faisait l'ancien code).
 - `docs/ARCHITECTURE.md` (phase 5) reste à créer.
 - Test interactif en navigateur réel à faire par l'utilisateur (aucun outil de navigateur disponible dans cette session).
+
+---
+
+## Post-phase 5 — corrections découvertes en testant `GUIDE.md` (`refactor/complete`)
+
+**Date** : 2026-09-17
+
+En suivant `GUIDE.md` pour un premier test manuel, deux bugs précédemment documentés comme « non corrigés » (phase 2 et phase 4) ont été corrigés à la racine, avec validation de l'utilisateur avant commit :
+
+1. **`Settings` acceptait implicitement `TEST_DATABASE_URL` comme un problème `.env.test`-only** — en réalité `.env.example` documente cette clé (et `ALERT_CHECK_INTERVAL_HOURS`/`EXPIRY_ALERT_DAYS_BEFORE`) directement dans `backend/.env.example`, donc un `cp .env.example .env` littéral fait toujours planter `Settings`. Corrigé : `backend/app/core/config.py` migré vers `SettingsConfigDict(extra="ignore")`, les trois clés déclarées explicitement comme champs. Test unitaire ajouté (`tests/unit/test_exceptions.py`). `backend/.env.test` (l'atelier de contournement de la phase 2) reste en place mais n'est plus strictement nécessaire pour `TEST_DATABASE_URL` — non retiré, changement de convention hors périmètre.
+2. **Avertissement « mauvaise racine de workspace »** au build Next.js, causé par la présence de deux `package-lock.json` (`frontend/package-lock.json`, quasi vide, jamais utilisé pour installer quoi que ce soit ; `frontend/lab-manage/package-lock.json`, le vrai). Corrigé : suppression du lockfile racine parasite, `turbopack.root` fixé explicitement dans `next.config.ts`.
+
+**Découverte en cours de route** : `GUIDE.md` lui-même avait un trou — il ne mentionnait que 2 des 3 clés `.env` à commenter (oubliait `TEST_DATABASE_URL`, alors documentée juste au-dessus dans le même fichier `.env.example`). Corrigé dans la foulée.
+
+**Vérifications** : `pytest` 133 passed (132 + 1 nouveau test). `mypy app` : 80 erreurs (vs 83 — le typage plus strict de `config.py` a résolu 3 erreurs préexistantes ailleurs, sans rapport direct). `ruff` clean sur les fichiers touchés. `npm run build` : passe, avertissement de racine disparu. `npm run lint` : 13 erreurs / 26 avertissements, inchangé.
+
+`docs/ARCHITECTURE.md` mis à jour pour retirer ces deux points de la liste des limites connues.
