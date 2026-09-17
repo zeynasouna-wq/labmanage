@@ -188,3 +188,26 @@ Contrairement à `suppliers`, le router `locations` d'origine (`app/routers/loca
 - `npm run lint`/`build` : sans objet.
 
 **Domaines métier** : ligne `locations` mise à jour dans CLAUDE.md → « backend terminé, frontend à refactorer ».
+
+---
+
+## Phase 3 — Backend, module `categories` (`refactor/categories`)
+
+**Date** : 2026-09-17
+
+Domaine quasi identique à `locations` (mêmes constats, même traitement) :
+
+**Fait** :
+1. Tests d'intégration (`backend/tests/integration/test_categories.py`, 11 tests) écrits et verts du premier coup sur le code non refactoré.
+2. Découpage : `app/modules/categories/{schemas,repository,service,router}.py`. `update_category` garde la logique `if data.field is not None: ...` d'origine (pas `exclude_unset`).
+3. `HTTPException` → `NotFoundError` (404). `app/routers/categories.py` supprimé, `app/schemas/schemas.py` section Category retirée (`CategoryResponse` ré-importée pour `ProductResponse`), `main.py` mis à jour.
+
+**Même bug pré-existant que `locations`, non re-testé** : `Category.name` a aussi une contrainte `UNIQUE` en base sans vérification applicative correspondante dans le router/service d'origine — même risque de crash (`IntegrityError` non gérée) sur doublon, documenté par commentaire dans le fichier de test plutôt que par une assertion sur un crash. Non corrigé.
+
+**Vérifications** :
+- `pytest -q` : 76 passed (65 précédents + 11 nouveaux).
+- `mypy app` : 83 erreurs, 11 fichiers — identique à la baseline. Vérifié : les 3 erreurs qui étaient dans `app/routers/categories.py` se retrouvent à l'identique dans `app/modules/categories/service.py` (mêmes lignes `category.field = data.field`, simplement déplacées avec le code qu'elles concernent).
+- `ruff check .` : 219 (vs 222 après `locations`).
+- `npm run lint`/`build` : sans objet.
+
+**Domaines métier** : ligne `categories` mise à jour dans CLAUDE.md → « backend terminé, frontend à refactorer ».

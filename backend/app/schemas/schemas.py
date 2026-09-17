@@ -3,38 +3,15 @@ from datetime import date, datetime
 from pydantic import BaseModel, field_validator
 
 from app.models.models import AlertStatus, AlertType, MovementType
+from app.modules.categories.schemas import CategoryResponse
 from app.modules.locations.schemas import LocationResponse
 from app.modules.suppliers.schemas import SupplierResponse
 
 # Auth and User schemas moved to app/modules/auth/schemas.py and
 # app/modules/users/schemas.py (see docs/REFACTOR_LOG.md, users/auth module).
-# Supplier and Location schemas moved to app/modules/suppliers/schemas.py and
-# app/modules/locations/schemas.py; their Response schemas are re-imported
-# here because ProductResponse (still unrefactored) nests both.
-
-
-# ─── Category Schemas ─────────────────────────────────────────────────────────
-
-
-class CategoryCreate(BaseModel):
-    name: str
-    description: str | None = None
-    color: str | None = None
-
-
-class CategoryUpdate(BaseModel):
-    name: str | None = None
-    description: str | None = None
-    color: str | None = None
-
-
-class CategoryResponse(BaseModel):
-    id: int
-    name: str
-    description: str | None = None
-    color: str | None = None
-
-    model_config = {"from_attributes": True}
+# Supplier, Location and Category schemas moved to their own
+# app/modules/<domain>/schemas.py; their Response schemas are re-imported
+# here because ProductResponse (still unrefactored) nests all three.
 
 
 # ─── Product Lot Schemas ──────────────────────────────────────────────────────
