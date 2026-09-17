@@ -211,3 +211,26 @@ Domaine quasi identique à `locations` (mêmes constats, même traitement) :
 - `npm run lint`/`build` : sans objet.
 
 **Domaines métier** : ligne `categories` mise à jour dans CLAUDE.md → « backend terminé, frontend à refactorer ».
+
+---
+
+## Phase 3 — Backend, module `products` (`refactor/products`)
+
+**Date** : 2026-09-17
+
+Domaine plus complexe que les précédents (sous-ressource `lots`, synchronisation de stock, validation de FK croisées vers `suppliers`/`locations`/`categories`).
+
+**Fait** :
+1. Tests d'intégration (`backend/tests/integration/test_products.py`, 29 tests) écrits avant tout découpage. Une erreur de données dans mon propre test corrigée avant le premier commit vert : « Methanol » contient la sous-chaîne « eth » (m-**eth**-anol), faussant un test de recherche censé ne matcher que « Ethanol » — remplacé par des noms sans chevauchement.
+2. Découpage : `app/modules/products/{schemas,repository,service,router}.py`. Point notable : `service.py` réutilise les `repository` de `suppliers`, `locations` et `categories` (déjà refactorés) pour les vérifications d'existence de FK à la création d'un produit, plutôt que d'interroger `Supplier`/`Location`/`Category` directement — cohérent avec la dépendance FK `products → suppliers/locations/categories` identifiée dans l'audit.
+3. La chorégraphie exacte `flush`/`refresh`/`commit` autour de `_sync_stock()` (recalcul de `current_stock` à partir des lots après chaque création/modification/suppression de lot) a été préservée à l'identique, via de petites méthodes `repository.refresh()`/`repository.commit()` dédiées plutôt qu'un accès direct à `db` depuis `service.py`.
+4. `HTTPException` → exceptions métier : `NotFoundError` (404 — produit/lot introuvable, fournisseur/emplacement/catégorie introuvable), `ConflictError` (409 — référence produit dupliquée à la création et à la modification ; **seul module où 409 est le code d'origine**, contrairement aux doublons 400 de `suppliers`). `update_lot`/`delete_lot` gardent leur dépendance FastAPI `require_technician_or_admin` telle quelle (message 403 différent des autres routes de ce router, qui utilisent `PermissionChecker`/`PermissionDenied`) — comportement figé et testé explicitement.
+5. `app/routers/products.py`, `app/services/product_service.py` supprimés. `app/schemas/schemas.py` : toute la section Product(Lot) retirée (plus besoin de ré-import, aucun autre domaine non refactoré ne nest ces schémas). `main.py` mis à jour. `ProductSummary` (déjà mort avant ce refactor, jamais utilisé) déplacée telle quelle dans le nouveau `schemas.py`, non supprimée — suppression hors périmètre de ce module.
+
+**Vérifications** :
+- `pytest -q` : 105 passed (76 précédents + 29 nouveaux), aucun test modifié.
+- `mypy app` : 83 erreurs, 11 fichiers — identique à la baseline (les 4 erreurs de `app/services/product_service.py` se retrouvent à l'identique dans `app/modules/products/service.py`).
+- `ruff check .` : 202 (vs 219 après `categories`). Un `SIM102` relevé dans `update_product` : reproduction fidèle d'un if imbriqué déjà présent dans le fichier d'origine, non modifié.
+- `npm run lint`/`build` : sans objet.
+
+**Domaines métier** : ligne `products` mise à jour dans CLAUDE.md → « backend terminé, frontend à refactorer ».

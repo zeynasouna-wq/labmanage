@@ -20,12 +20,12 @@ from app.models.models import User, UserRole, UserStatus
 from app.modules.auth.router import router as auth_router
 from app.modules.categories.router import router as categories_router
 from app.modules.locations.router import router as locations_router
+from app.modules.products.router import router as products_router
 from app.modules.suppliers.router import router as suppliers_router
 from app.modules.users.router import router as users_router
 from app.routers import (
     export,
     movements,
-    products,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -56,7 +56,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(suppliers_router)
-app.include_router(products.router)
+app.include_router(products_router)
 app.include_router(movements.router)
 app.include_router(categories_router)
 app.include_router(locations_router)
