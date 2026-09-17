@@ -24,8 +24,8 @@ Ordre de traitement recommandé (racine des dépendances FK en premier, agrégat
 | `products` | `backend/app/routers/products.py`, `backend/app/services/product_service.py` | `frontend/lab-manage/app/page.tsx` (`ProductsPage`) | à refactorer |
 | `stock` (movements) | `backend/app/routers/movements.py`, `backend/app/services/movement_service.py` | `frontend/lab-manage/app/page.tsx` (`MovementsPage`) | à refactorer |
 | `export` | `backend/app/routers/export.py`, `backend/app/services/csv_export_service.py` | `frontend/lab-manage/app/page.tsx` (`ExportButton`) | à refactorer |
-| `alerts` | `backend/app/services/alert_service.py` (jamais monté sur un router) | — | à trancher (voir `docs/REFACTOR_LOG.md`) |
-| `dashboard` | `backend/app/services/dashboard_service.py` (jamais monté sur un router) | `frontend/lab-manage/app/page.tsx` (`DashboardPage`, calcul recalculé côté client) | à trancher (voir `docs/REFACTOR_LOG.md`) |
+| `alerts` | `backend/app/services/alert_service.py` (pas encore de router — à créer, cf. décision `docs/REFACTOR_LOG.md`) | — | à créer (feat, pas un refactor pur) |
+| `dashboard` | `backend/app/services/dashboard_service.py` (pas encore de router — à créer, cf. décision `docs/REFACTOR_LOG.md`) | `frontend/lab-manage/app/page.tsx` (`DashboardPage`, calcul recalculé côté client, à remplacer par un appel API) | à créer (feat, pas un refactor pur) |
 
 Mettre à jour la colonne « État » à la fin de chaque module (`à refactorer` → `en cours` → `terminé`).
 
