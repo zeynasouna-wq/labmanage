@@ -1,102 +1,39 @@
-from pydantic import BaseModel, EmailStr, field_validator, model_validator
-from typing import Optional, List
-from datetime import datetime, date
-from app.models.models import UserRole, UserStatus, MovementType, AlertType, AlertStatus
+from datetime import date, datetime
 
+from pydantic import BaseModel, field_validator
 
-# ─── Auth Schemas ─────────────────────────────────────────────────────────────
+from app.models.models import AlertStatus, AlertType, MovementType
 
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
-    user_id: int
-    role: UserRole
-    name: str
-
-
-class RefreshTokenRequest(BaseModel):
-    refresh_token: str
-
-
-# ─── User Schemas ─────────────────────────────────────────────────────────────
-
-class UserCreate(BaseModel):
-    name: str
-    email: EmailStr
-    password: str
-    role: UserRole = UserRole.viewer
-
-    @field_validator("password")
-    @classmethod
-    def password_strength(cls, v):
-        if len(v) < 8:
-            raise ValueError("Le mot de passe doit contenir au moins 8 caractères")
-        return v
-
-
-class UserUpdate(BaseModel):
-    name: Optional[str] = None
-    role: Optional[UserRole] = None
-    status: Optional[UserStatus] = None
-    is_active: Optional[bool] = None
-
-
-class UserPasswordChange(BaseModel):
-    current_password: str
-    new_password: str
-
-    @field_validator("new_password")
-    @classmethod
-    def password_strength(cls, v):
-        if len(v) < 8:
-            raise ValueError("Le mot de passe doit contenir au moins 8 caractères")
-        return v
-
-
-class UserResponse(BaseModel):
-    id: int
-    name: str
-    email: str
-    role: UserRole
-    status: UserStatus
-    is_active: bool
-    created_at: datetime
-    last_login: Optional[datetime] = None
-
-    model_config = {"from_attributes": True}
+# Auth and User schemas moved to app/modules/auth/schemas.py and
+# app/modules/users/schemas.py (see docs/REFACTOR_LOG.md, users/auth module).
 
 
 # ─── Supplier Schemas ─────────────────────────────────────────────────────────
 
+
 class SupplierCreate(BaseModel):
     name: str
-    contact: Optional[str] = None
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    address: Optional[str] = None
+    contact: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    address: str | None = None
 
 
 class SupplierUpdate(BaseModel):
-    name: Optional[str] = None
-    contact: Optional[str] = None
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    address: Optional[str] = None
+    name: str | None = None
+    contact: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    address: str | None = None
 
 
 class SupplierResponse(BaseModel):
     id: int
     name: str
-    contact: Optional[str] = None
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    address: Optional[str] = None
+    contact: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    address: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -104,22 +41,23 @@ class SupplierResponse(BaseModel):
 
 # ─── Location Schemas ─────────────────────────────────────────────────────────
 
+
 class LocationCreate(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     temperature_controlled: bool = False
 
 
 class LocationUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    temperature_controlled: Optional[bool] = None
+    name: str | None = None
+    description: str | None = None
+    temperature_controlled: bool | None = None
 
 
 class LocationResponse(BaseModel):
     id: int
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     temperature_controlled: bool
 
     model_config = {"from_attributes": True}
@@ -127,34 +65,36 @@ class LocationResponse(BaseModel):
 
 # ─── Category Schemas ─────────────────────────────────────────────────────────
 
+
 class CategoryCreate(BaseModel):
     name: str
-    description: Optional[str] = None
-    color: Optional[str] = None
+    description: str | None = None
+    color: str | None = None
 
 
 class CategoryUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    color: Optional[str] = None
+    name: str | None = None
+    description: str | None = None
+    color: str | None = None
 
 
 class CategoryResponse(BaseModel):
     id: int
     name: str
-    description: Optional[str] = None
-    color: Optional[str] = None
+    description: str | None = None
+    color: str | None = None
 
     model_config = {"from_attributes": True}
 
 
 # ─── Product Lot Schemas ──────────────────────────────────────────────────────
 
+
 class ProductLotCreate(BaseModel):
     lot_number: str
     quantity: int
-    expiry_date: Optional[date] = None
-    notes: Optional[str] = None
+    expiry_date: date | None = None
+    notes: str | None = None
 
     @field_validator("quantity")
     @classmethod
@@ -169,25 +109,26 @@ class ProductLotResponse(BaseModel):
     product_id: int
     lot_number: str
     quantity: int
-    expiry_date: Optional[date] = None
+    expiry_date: date | None = None
     received_at: datetime
-    notes: Optional[str] = None
+    notes: str | None = None
 
     model_config = {"from_attributes": True}
 
 
 # ─── Product Schemas ──────────────────────────────────────────────────────────
 
+
 class ProductCreate(BaseModel):
     name: str
     reference: str
-    description: Optional[str] = None
+    description: str | None = None
     minimum_stock: int = 0
     alert_stock: int = 0
-    supplier_id: Optional[int] = None
-    location_id: Optional[int] = None
-    category_id: Optional[int] = None
-    lots: List[ProductLotCreate] = []
+    supplier_id: int | None = None
+    location_id: int | None = None
+    category_id: int | None = None
+    lots: list[ProductLotCreate] = []
 
     @field_validator("reference")
     @classmethod
@@ -219,15 +160,15 @@ class ProductCreate(BaseModel):
 
 
 class ProductUpdate(BaseModel):
-    name: Optional[str] = None
-    reference: Optional[str] = None
-    description: Optional[str] = None
-    minimum_stock: Optional[int] = None
-    alert_stock: Optional[int] = None
-    supplier_id: Optional[int] = None
-    location_id: Optional[int] = None
-    category_id: Optional[int] = None
-    is_active: Optional[bool] = None
+    name: str | None = None
+    reference: str | None = None
+    description: str | None = None
+    minimum_stock: int | None = None
+    alert_stock: int | None = None
+    supplier_id: int | None = None
+    location_id: int | None = None
+    category_id: int | None = None
+    is_active: bool | None = None
 
     @field_validator("minimum_stock")
     @classmethod
@@ -248,23 +189,24 @@ class ProductResponse(BaseModel):
     id: int
     name: str
     reference: str
-    description: Optional[str] = None
+    description: str | None = None
     current_stock: int
     minimum_stock: int
     alert_stock: int
     is_active: bool
     created_at: datetime
-    updated_at: Optional[datetime] = None
-    supplier: Optional[SupplierResponse] = None
-    location: Optional[LocationResponse] = None
-    category: Optional[CategoryResponse] = None
-    lots: List[ProductLotResponse] = []
+    updated_at: datetime | None = None
+    supplier: SupplierResponse | None = None
+    location: LocationResponse | None = None
+    category: CategoryResponse | None = None
+    lots: list[ProductLotResponse] = []
 
     model_config = {"from_attributes": True}
 
 
 class ProductSummary(BaseModel):
     """Lightweight product for lists"""
+
     id: int
     name: str
     reference: str
@@ -272,23 +214,24 @@ class ProductSummary(BaseModel):
     minimum_stock: int
     alert_stock: int
     is_active: bool
-    supplier_name: Optional[str] = None
-    location_name: Optional[str] = None
-    category_name: Optional[str] = None
+    supplier_name: str | None = None
+    location_name: str | None = None
+    category_name: str | None = None
 
     model_config = {"from_attributes": True}
 
 
 # ─── Stock Movement Schemas ───────────────────────────────────────────────────
 
+
 class StockMovementCreate(BaseModel):
     product_id: int
     lot_id: int
     movement_type: MovementType
     quantity: int
-    reason: Optional[str] = None
-    reference_document: Optional[str] = None
-    created_at: Optional[datetime] = None  # Date optionnelle du mouvement
+    reason: str | None = None
+    reference_document: str | None = None
+    created_at: datetime | None = None  # Date optionnelle du mouvement
 
     @field_validator("quantity")
     @classmethod
@@ -301,17 +244,17 @@ class StockMovementCreate(BaseModel):
 class StockMovementResponse(BaseModel):
     id: int
     product_id: int
-    lot_id: Optional[int] = None
-    product_name: Optional[str] = None
-    lot_number: Optional[str] = None
+    lot_id: int | None = None
+    product_name: str | None = None
+    lot_number: str | None = None
     user_id: int
-    user_name: Optional[str] = None
+    user_name: str | None = None
     movement_type: MovementType
     quantity: int
     stock_before: int
     stock_after: int
-    reason: Optional[str] = None
-    reference_document: Optional[str] = None
+    reason: str | None = None
+    reference_document: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -319,25 +262,27 @@ class StockMovementResponse(BaseModel):
 
 # ─── Alert Schemas ────────────────────────────────────────────────────────────
 
+
 class AlertResponse(BaseModel):
     id: int
     product_id: int
-    product_name: Optional[str] = None
+    product_name: str | None = None
     alert_type: AlertType
     status: AlertStatus
     message: str
     triggered_at: datetime
-    acknowledged_at: Optional[datetime] = None
-    resolved_at: Optional[datetime] = None
+    acknowledged_at: datetime | None = None
+    resolved_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
 
 class AlertAcknowledge(BaseModel):
-    comment: Optional[str] = None
+    comment: str | None = None
 
 
 # ─── Dashboard / Stats Schemas ────────────────────────────────────────────────
+
 
 class DashboardStats(BaseModel):
     total_products: int
@@ -353,17 +298,18 @@ class DashboardStats(BaseModel):
 class StockReport(BaseModel):
     product_id: int
     product_name: str
-    reference: Optional[str] = None
+    reference: str | None = None
     current_stock: int
     minimum_stock: int
     alert_stock: int
-    expiry_date: Optional[date] = None
-    supplier_name: Optional[str] = None
-    location_name: Optional[str] = None
+    expiry_date: date | None = None
+    supplier_name: str | None = None
+    location_name: str | None = None
     status: str  # "ok", "low", "out", "expiring", "expired"
 
 
 # ─── Pagination ───────────────────────────────────────────────────────────────
+
 
 class PaginatedResponse(BaseModel):
     items: list

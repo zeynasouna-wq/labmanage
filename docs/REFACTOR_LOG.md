@@ -107,3 +107,33 @@ En créant `backend/.env` (copie de `.env.example`, geste documenté par le fich
 - `npm run lint` / `npm run build` : toujours impossible dans cet environnement (`npm` absent), sans changement depuis la phase 1. Frontend non touché dans cette phase.
 
 **À faire** : rien de bloquant pour la suite ; les deux bugs découverts (migrations Alembic no-op, `Settings` qui rejette les clés `.env` inconnues) restent ouverts et non corrigés, à traiter par décision explicite de l'utilisateur si souhaité.
+
+---
+
+## Phase 3 — Backend, module `users` / `auth` (`refactor/users-auth`)
+
+**Date** : 2026-09-17
+
+**Décision d'architecture — modèles SQLAlchemy non déplacés** : `User`, `UserRole`, `UserStatus` restent dans `app/models/models.py` partagé, au lieu d'un `app/modules/users/models.py` comme le prescrit littéralement CLAUDE.md. Raison : `User` est référencé par `StockMovement`, `Alert`, et importé dans ~15 fichiers d'autres domaines pas encore refactorés (`movement_service.py`, `product_service.py`, tous les routers non traités, `core/dependencies.py`, `core/permissions.py`, etc.). Le déplacer maintenant aurait forcé à toucher tous ces fichiers hors du domaine `users`/`auth`, à l'encontre de la règle « un module métier à la fois ». Décision : garder `app/models/models.py` comme source unique jusqu'à ce que chaque domaine consommateur soit lui-même refactoré ; envisager un déplacement groupé des modèles en toute fin de refactor, ou choisir de garder un `models.py` partagé de façon permanente — à trancher avec l'utilisateur plus tard si souhaité. Idem pour `auth` : pas de `models.py`/`repository.py` propres (aucune table possédée ; `auth/service.py` réutilise `modules/users/repository.py` pour ses deux lectures, cohérent avec la dépendance FK `auth → users` identifiée dans l'audit).
+
+**Fait** :
+1. Tests d'intégration figeant le comportement actuel (`backend/tests/integration/test_auth_users.py`, 29 tests) écrits et validés **avant** tout découpage — commit séparé (`aac5279`), tous verts sur le code non refactoré.
+2. Découpage effectué :
+   - `app/modules/auth/{schemas,service,router}.py` : `LoginRequest`/`TokenResponse`/`RefreshTokenRequest`, `authenticate_user`/`refresh_access_token`, routes `/auth/login`, `/auth/refresh`, `/auth/me`.
+   - `app/modules/users/{schemas,repository,service,router}.py` : `UserCreate`/`UserUpdate`/`UserPasswordChange`/`UserResponse`, logique métier + accès DB séparés, routes `/users/*`.
+   - `app/routers/auth.py`, `app/routers/users.py`, `app/services/auth_service.py`, `app/services/user_service.py` supprimés (remplacés).
+   - `app/schemas/schemas.py` : sections Auth/User retirées ; import `EmailStr` retiré (devenu inutile par cette suppression). `model_validator` reste un import inutilisé pré-existant, non touché (hors périmètre de ce module).
+   - `main.py` : imports et `include_router` mis à jour vers `app.modules.auth.router`/`app.modules.users.router`.
+3. `HTTPException` remplacée par les exceptions métier (`app/core/exceptions.py`, posées en phase 2) dans les deux nouveaux `service.py` : `ValidationAppError` (400 — email dupliqué, auto-suppression, auto-désactivation, mot de passe actuel incorrect), `NotFoundError` (404 — utilisateur introuvable), `UnauthorizedError` (401 — identifiants invalides, refresh token invalide/type incorrect, utilisateur invalide), `PermissionDeniedError` (403 — compte désactivé/en attente/suspendu). Chaque mapping vérifié pour préserver exactement le même status code que l'`HTTPException` d'origine (ex. email dupliqué reste 400, pas 409 malgré `ConflictError` disponible). `core/permissions.py` (`PermissionDenied`, utilisée au niveau des routers, pas des services) et `core/dependencies.py`/`core/security.py` (utilisés par tous les domaines) **non touchés** — hors périmètre de ce module.
+
+**Vérifications** :
+- `pytest -q` (backend) : 38 passed (9 fondations + 29 figeant `users`/`auth`), **sans modifier aucun des 29 tests d'intégration** écrits avant le refactor.
+- `mypy app` : 83 erreurs, 11 fichiers — **identique à la baseline**. Vérifié fichier par fichier : `app/services/auth_service.py` (12 erreurs) → `app/modules/auth/service.py` (12, mêmes lignes) ; `app/services/user_service.py` (5) → `app/modules/users/service.py` (5). Aucune régression, aucune amélioration — erreurs de typage pré-existantes simplement déplacées.
+- `ruff check .` (repo entier) : 230 erreurs (vs 317 en fin de phase 2) — baisse mécanique due à la suppression des 4 anciens fichiers et à `ruff --fix`/`ruff format` appliqués sur les nouveaux. Erreurs restantes dans les nouveaux fichiers : `B008` (`Depends(...)` en valeur par défaut — pattern FastAPI standard, utilisé partout ailleurs dans le codebase, pas une régression) et 1 `DTZ003` (`datetime.utcnow()`, ligne copiée à l'identique depuis l'ancien `auth_service.py`, comportement volontairement inchangé). `BLE001` pré-existant dans `main.py` (déjà noté en phase 2) inchangé.
+- `npm run lint`/`npm run build` : sans objet, aucun fichier frontend touché dans ce module.
+
+**Frontend** : non traité dans cette phase (réservé à la phase 4, `refactor/frontend`, un domaine à la fois). `LoginPage`/`UsersPage` restent dans `app/page.tsx` pour l'instant.
+
+**Problème** : aucun.
+
+**Domaines métier** : lignes `auth` et `users` mises à jour dans CLAUDE.md → « backend terminé, frontend à refactorer ».

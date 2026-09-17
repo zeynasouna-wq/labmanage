@@ -17,15 +17,15 @@ from app.core.security import get_password_hash
 # Créer l'admin au démarrage si il n'existe pas
 from app.db.session import DATABASE_URL, Base, SessionLocal, engine
 from app.models.models import User, UserRole, UserStatus
+from app.modules.auth.router import router as auth_router
+from app.modules.users.router import router as users_router
 from app.routers import (
-    auth,
     categories,
     export,
     locations,
     movements,
     products,
     suppliers,
-    users,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -53,8 +53,8 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(auth.router)
-app.include_router(users.router)
+app.include_router(auth_router)
+app.include_router(users_router)
 app.include_router(suppliers.router)
 app.include_router(products.router)
 app.include_router(movements.router)
