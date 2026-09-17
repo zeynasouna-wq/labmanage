@@ -105,15 +105,15 @@ Toujours relire le fichier de migration généré avant de l'appliquer.
 
 ## Backend — tests
 
-Tests dans `backend/tests/` :
+Mis en place lors de la phase « Fondations » (`refactor/core`, 2026-09-17). Tests dans `backend/tests/` :
 - `unit/` : services avec repositories simulés (pas de base)
 - `integration/` : endpoints via `TestClient` sur une base PostgreSQL de test
-
-**État actuel** : aucun dossier `backend/tests/` n'existe et `pytest` ne collecte aucun test. Cette section décrit la cible mise en place lors de la phase « Fondations » du refactor.
+- Fichiers hors de ces deux dossiers (ex. `test_conftest_smoke.py`) : sanity checks de l'infra de test elle-même, pas d'un domaine métier.
 
 Base de test :
 - Base PostgreSQL dédiée, **jamais** la base de développement ni de production.
-- URL fournie par la variable `TEST_DATABASE_URL` (déclarée dans `.env` et `.env.example`).
+- URL fournie par la variable `TEST_DATABASE_URL`, déclarée dans **`backend/.env.test`** (fichier séparé, jamais commité) et documentée dans `backend/.env.example`.
+- **Ne pas mettre `TEST_DATABASE_URL` dans `backend/.env`** : `Settings` (`app/core/config.py`) parse ce fichier sans `extra="ignore"`, donc toute clé qu'il ne déclare pas fait planter l'app au démarrage (bug pré-existant, voir `docs/REFACTOR_LOG.md` phase 2 — `ALERT_CHECK_INTERVAL_HOURS`/`EXPIRY_ALERT_DAYS_BEFORE` dans `.env.example` sont affectées par le même problème). `backend/tests/conftest.py` charge `.env.test` lui-même via `python-dotenv`, indépendamment de `Settings`.
 - **Important** : en local, `DATABASE_URL` pointe par défaut vers SQLite (`sqlite:///./labo_stock.db`) pour un démarrage rapide sans dépendance externe. `TEST_DATABASE_URL` doit **toujours** pointer vers PostgreSQL, jamais SQLite, pour éviter les divergences de comportement (types, contraintes, enums) entre les tests et la production (qui est PostgreSQL sur Render).
 - Lancement local via Docker :
   ```bash
@@ -121,9 +121,10 @@ Base de test :
     -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
     -e POSTGRES_DB=labmanage_test -p 5433:5432 postgres:16
   ```
-  puis `TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5433/labmanage_test`
-- Le schéma de test est créé via `alembic upgrade head` (pas `create_all`) dans une fixture de session.
-- Chaque test s'exécute dans une transaction annulée à la fin : les tests sont indépendants et rejouables.
+  puis, dans `backend/.env.test` : `TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5433/labmanage_test`
+- **Écart temporaire avec la cible** : le schéma de test est créé via `Base.metadata.create_all()` (fixture `_test_schema`, session-scope) et non via `alembic upgrade head`, car les migrations actuelles ne créent réellement aucune table (bug pré-existant, voir `docs/REFACTOR_LOG.md` phase 2 — `Base.metadata.create_all` n'a donc pas pu être retiré de `main.py` non plus). Décision validée par l'utilisateur. À revenir sur `alembic upgrade head` une fois les migrations corrigées.
+- Chaque test s'exécute dans une transaction annulée à la fin (connexion + `SAVEPOINT` relancé après chaque `commit()` applicatif) : les tests sont indépendants et rejouables.
+- Le `client` de test (fixture `client`) instancie `TestClient(app)` **sans** bloc `with` : les événements `startup`/`shutdown` de `main.py` (dont la création automatique de l'admin) ne se déclenchent alors pas, ce qui évite de polluer la base de test hors transaction.
 
 ---
 

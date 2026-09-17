@@ -3,19 +3,30 @@ LaboStock - Laboratory Stock Management System
 FastAPI Main Application
 """
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from app.db.session import engine, Base, DATABASE_URL
-from app.core.config import settings
-from app.routers import suppliers
-from app.routers import auth, movements, products, users, categories, locations, export
 import logging
-# Créer l'admin au démarrage si il n'existe pas
-from app.db.session import SessionLocal
-from app.models.models import User
-from app.core.security import get_password_hash
-from app.models.models import UserRole, UserStatus
 
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, Response
+from fastapi.utils import is_body_allowed_for_status_code
+
+from app.core.config import settings
+from app.core.exceptions import AppError
+from app.core.security import get_password_hash
+
+# Créer l'admin au démarrage si il n'existe pas
+from app.db.session import DATABASE_URL, Base, SessionLocal, engine
+from app.models.models import User, UserRole, UserStatus
+from app.routers import (
+    auth,
+    categories,
+    export,
+    locations,
+    movements,
+    products,
+    suppliers,
+    users,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -70,13 +81,27 @@ def health_check():
         "status": "healthy",
         "database": "connected",
     }
-    
+
+
+@app.exception_handler(AppError)
+async def app_error_handler(request: Request, exc: AppError):
+    """Converts business exceptions (app/core/exceptions.py) to HTTP responses.
+
+    Mirrors fastapi.exception_handlers.http_exception_handler exactly, so a
+    service raising AppError produces the same response shape as one raising
+    HTTPException(status_code=exc.status_code, detail=exc.detail).
+    """
+    if not is_body_allowed_for_status_code(exc.status_code):
+        return Response(status_code=exc.status_code, headers=exc.headers)
+    return JSONResponse(
+        {"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers
+    )
+
 
 @app.on_event("startup")
 async def startup():
     logging.basicConfig(level=logging.INFO)
     logger.info(f"==> DATABASE: {DATABASE_URL[:20]}...")
-    
 
     db = SessionLocal()
     try:
@@ -101,8 +126,10 @@ async def startup():
     finally:
         db.close()
 
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(
         "main:app",
         host="0.0.0.0",

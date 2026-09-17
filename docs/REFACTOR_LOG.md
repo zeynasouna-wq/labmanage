@@ -50,3 +50,60 @@ Conclusion transmise à l'utilisateur : travail backend **inachevé**, pas du co
 - `npm run lint` / `npm run build` (frontend) : **impossible à exécuter dans cet environnement** — `npm` n'est pas installé (seul `node` v12.22.9 est présent via apt, sans npm, et incompatible avec Next.js 16.2.3 qui exige Node ≥ 20). Suppression d'un fichier non importé nulle part et donc sans effet de compilation attendu, mais **non vérifié par un build réel**. À relancer manuellement ou sur CI avant de considérer cette phase totalement validée.
 
 **Problème** : outillage `npm`/Node absent de cet environnement d'exécution — bloque la vérification `npm run lint`/`npm run build` requise après chaque étape touchant le frontend (phase 4 en particulier). Signalé à l'utilisateur.
+
+---
+
+## Phase 2 — Fondations (`refactor/core`)
+
+**Date** : 2026-09-17
+
+**Base de test** : conteneur Docker `labmanage-test-db` (postgres:16, port 5433) créé conformément à `CLAUDE.md`. `TEST_DATABASE_URL` ajouté à `backend/.env.example` (validé par l'utilisateur, cf. point d'arrêt « changement de variable d'environnement »).
+
+**BUG CRITIQUE DÉCOUVERT — migrations Alembic no-op, `create_all` NON retiré** :
+
+Point d'arrêt obligatoire exécuté : `alembic upgrade head` sur une base PostgreSQL vide, puis `alembic revision --autogenerate`.
+
+- `alembic upgrade head` passe sans erreur et stamp `alembic_version` sur le head (`cascade_delete_user_relations`).
+- Mais après cette commande, la base ne contient **qu'une seule table : `alembic_version`**. Aucune des 9 tables du modèle n'existe.
+- `alembic revision --autogenerate` le confirme : il détecte les 9 tables (`categories`, `locations`, `suppliers`, `users`, `products`, `alerts`, `product_lots`, `stock_movements`) + tous leurs index comme « ajoutées ».
+
+**Cause** : les 3 migrations existantes ne font rien :
+- `alembic/versions/818f2efe08d8_initial.py` : `upgrade()` = `pass` (jamais rempli après génération auto).
+- `alembic/versions/817356a89c73_sync_prod_schema.py` : `pass`, commentaire *"No schema changes needed - the models already reflect the current structure"*.
+- `alembic/versions/cascade_delete_user_relations.py` : le DDL réel (`ADD CASCADE`/`SET NULL` sur les FK `stock_movements.user_id` et `alerts.acknowledged_by_id`) est écrit **en commentaire**, jamais exécuté (note : *"When migrating to PostgreSQL, uncomment the code below"*).
+
+**Impact** : en production, le schéma n'existe que grâce à `Base.metadata.create_all(bind=engine)` dans `main.py` au démarrage. Alembic ne gère rien de réel actuellement, malgré les 3 fichiers de migration présents. Sur toute base fraîche, retirer `create_all` sans corriger les migrations d'abord laisserait l'application démarrer sans aucune table.
+
+**Effet secondaire probable** : les contraintes `ondelete="CASCADE"` (sur `stock_movements.user_id`) et `ondelete="SET NULL"` (sur `alerts.acknowledged_by_id`) déclarées dans `models.py` ne sont vraisemblablement **pas appliquées au niveau de la base PostgreSQL de production**, puisque la migration censée les poser est un no-op. Seul SQLAlchemy au niveau ORM applique un comportement de cascade (`cascade="all, delete-orphan"` / `cascade="all, delete"` côté `relationship()`), ce qui n'est pas équivalent à une contrainte DB réelle (ne protège pas contre des suppressions SQL directes).
+
+**Décision** : `Base.metadata.create_all` **n'est pas retiré**. Reporté à l'utilisateur, non corrigé (conformément à la règle « tout bug découvert : noter sans corriger »). Réécrire les migrations pour qu'elles reflètent réellement le schéma actuel est un chantier à part, plus risqué qu'un refactor pur — à traiter séparément si demandé explicitement.
+
+**BUG DÉCOUVERT — `Settings` plante si `.env` contient une clé non déclarée** :
+
+En créant `backend/.env` (copie de `.env.example`, geste documenté par le fichier lui-même : « Copy this file to .env and fill in the values »), `Settings()` a levé une `ValidationError` pydantic (`extra_forbidden`) sur 3 clés : `TEST_DATABASE_URL`, `ALERT_CHECK_INTERVAL_HOURS`, `EXPIRY_ALERT_DAYS_BEFORE`. Ces deux dernières étaient déjà présentes dans `.env.example` **avant** toute modification de cette session (cf. audit initial). `app/core/config.py` utilise `class Config: env_file = ".env"` (style pydantic v1) sans `extra="ignore"` ; pydantic-settings v2 valide donc tout le contenu du fichier `.env` contre les champs déclarés de `Settings` et rejette les clés inconnues. Vérifié : une variable d'environnement OS du même nom (hors fichier `.env`) ne déclenche pas ce problème — seul le contenu du fichier `.env` est concerné.
+
+**Impact réel** : un nouveau développeur qui suit littéralement l'en-tête de `.env.example` (« Copy this file to .env ») fait planter l'application au démarrage. Bug pré-existant, non introduit par cette session. **Non corrigé** (conformément à la règle « bug découvert : noter sans corriger ») — corriger `Settings` (ajouter `extra="ignore"` ou déclarer les champs manquants) est un changement de comportement du chargement de config, à traiter explicitement, pas en passant.
+
+**Contournement pour l'infra de test** (n'affecte aucun fichier applicatif) :
+- `backend/.env` (local, non commité) : `TEST_DATABASE_URL` retiré, `ALERT_CHECK_INTERVAL_HOURS`/`EXPIRY_ALERT_DAYS_BEFORE` commentés.
+- `backend/.env.test` (nouveau, non commité, ajouté à `.gitignore`) : contient uniquement `TEST_DATABASE_URL`, chargé exclusivement par `tests/conftest.py` via `python-dotenv`, jamais par `Settings`.
+- `backend/.env.example` et `CLAUDE.md` mis à jour pour documenter cette séparation.
+
+**Fait** :
+- `backend/.gitignore` : ajout de `.env`, `.env.test`, `.pytest_cache/` (l'ancien `.gitignore` n'excluait que `env/`, un dossier — jamais de fichier `.env` réel committé jusqu'ici, mais aucun garde-fou explicite n'existait).
+- `backend/tests/conftest.py` : fixtures `_test_schema` (crée le schéma via `Base.metadata.create_all`, cf. décision ci-dessus), `db_session` (connexion + transaction externe + SAVEPOINT relancé après chaque `commit()` applicatif, rollback complet en fin de test), `client` (`TestClient(app)` sans bloc `with`, pour ne pas déclencher le `startup` de `main.py` qui crée un admin hors transaction).
+- `backend/pytest.ini` : `testpaths = tests`.
+- `backend/tests/test_conftest_smoke.py` : 3 tests de sanity sur l'infra elle-même (endpoint `/health`, isolation transactionnelle entre deux tests). Tous verts.
+- `backend/app/core/exceptions.py` : classe de base `AppError` (status_code, detail, headers optionnels) + 5 exceptions génériques (`NotFoundError`, `ConflictError`, `ValidationAppError`, `PermissionDeniedError`, `UnauthorizedError`). Les exceptions spécifiques à un domaine (ex. `ProductNotFoundError`, `InsufficientStockError` citées en exemple dans CLAUDE.md) seront ajoutées module par module en phase 3, pas ici.
+- `backend/main.py` : handler global `app_error_handler` enregistré via `@app.exception_handler(AppError)`, qui réplique **exactement** `fastapi.exception_handlers.http_exception_handler` (même gestion de `is_body_allowed_for_status_code`, même corps `{"detail": ...}`, mêmes headers). Vérifié par test unitaire que le corps JSON produit est byte-identique à celui d'un `HTTPException` équivalent. Import réordonné par `ruff --fix`/`ruff format` (mécanique, aucun changement de comportement).
+- `backend/tests/unit/test_exceptions.py` : 6 tests unitaires sur `AppError` et le handler (defaults, override, headers, égalité byte-à-byte avec le handler FastAPI par défaut). Tous verts.
+- Aucun service existant n'a été modifié : ils continuent de lever `HTTPException` directement. Le remplacement par les exceptions métier se fait domaine par domaine en phase 3 (CLAUDE.md, "Backend — architecture").
+
+**Vérifications** :
+- `pytest -q` (backend) : 9 passed (3 smoke + 6 exceptions).
+- `mypy app` : 83 erreurs, 11 fichiers — **identique à la baseline**, zéro régression introduite par `core/exceptions.py`.
+- `ruff check` (fichiers touchés/créés : `app/core/exceptions.py`, `main.py`, `tests/`) : 1 erreur restante, `BLE001` sur le `except Exception` pré-existant du `startup` de `main.py` (déjà présent dans la baseline de 318 erreurs, logique non touchée, hors périmètre de cette phase).
+- `ruff check .` (repo entier) : 317 erreurs (vs 318 en baseline — legère baisse due au nettoyage mécanique des imports de `main.py`), aucune régression.
+- `npm run lint` / `npm run build` : toujours impossible dans cet environnement (`npm` absent), sans changement depuis la phase 1. Frontend non touché dans cette phase.
+
+**À faire** : rien de bloquant pour la suite ; les deux bugs découverts (migrations Alembic no-op, `Settings` qui rejette les clés `.env` inconnues) restent ouverts et non corrigés, à traiter par décision explicite de l'utilisateur si souhaité.
