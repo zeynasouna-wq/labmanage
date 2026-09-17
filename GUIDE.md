@@ -47,15 +47,16 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-**⚠️ Piège connu (bug documenté dans `docs/REFACTOR_LOG.md`, phase 2)** : `Settings` (`app/core/config.py`) plante au démarrage si `.env` contient une clé qu'il ne déclare pas. Deux lignes de `.env.example` sont concernées — commente-les avant de lancer le serveur :
+**⚠️ Piège connu (bug documenté dans `docs/REFACTOR_LOG.md`, phase 2)** : `Settings` (`app/core/config.py`) plante au démarrage si `.env` contient une clé qu'il ne déclare pas. **Trois lignes** de `.env.example` sont concernées — commente-les toutes les trois avant de lancer le serveur (`.env.example` les documente à titre de référence, mais elles ne doivent jamais rester actives dans `.env` lui-même) :
 
 ```bash
-# Dans backend/.env, commente ces deux lignes (préfixe #) :
+# Dans backend/.env, commente ces trois lignes (préfixe #) :
+# TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5433/labmanage_test
 # ALERT_CHECK_INTERVAL_HOURS=24
 # EXPIRY_ALERT_DAYS_BEFORE=30
 ```
 
-Ne touche pas à `TEST_DATABASE_URL` — elle ne sert que pour `pytest`, pas pour ce test manuel (et de toute façon elle ne doit jamais aller dans `.env`, voir le commentaire dans `.env.example`).
+`TEST_DATABASE_URL` ne sert que pour `pytest`, pas pour ce test manuel — et sa vraie place, si tu en as besoin un jour, est `backend/.env.test`, jamais `backend/.env` (voir le commentaire dans `.env.example`).
 
 Le reste du fichier peut rester tel quel : `DATABASE_URL` en SQLite, `FIRST_ADMIN_EMAIL=admin@labo.sn` / `FIRST_ADMIN_PASSWORD=Admin@2024!` (l'admin est créé automatiquement au premier démarrage), `CORS_ORIGINS` inclut déjà `http://localhost:3000`.
 
@@ -199,7 +200,7 @@ rm backend/labo_stock.db
 
 | Symptôme | Piste |
 |---|---|
-| Le backend plante au démarrage avec une erreur pydantic `extra_forbidden` | Tu as oublié de commenter `ALERT_CHECK_INTERVAL_HOURS`/`EXPIRY_ALERT_DAYS_BEFORE` dans `backend/.env` (§2.1). |
+| Le backend plante au démarrage avec une erreur pydantic `extra_forbidden` | Tu as oublié de commenter `TEST_DATABASE_URL`, `ALERT_CHECK_INTERVAL_HOURS` ou `EXPIRY_ALERT_DAYS_BEFORE` dans `backend/.env` (§2.1 — regarde le message d'erreur, il indique laquelle des trois clés reste active). |
 | `npm run dev` échoue avec une erreur liée à `engines` ou une syntaxe non supportée | Ta version de Node est trop ancienne (§1) — il en faut ≥ 20. |
 | Page blanche / erreur dans la console navigateur au chargement | Vérifie que `backend` tourne bien et que `.env.local` du frontend pointe vers la bonne URL (§3.1). |
 | Un bouton d'action (modifier/supprimer) est invisible | Probablement normal — les permissions varient selon le rôle connecté (voir `backend/app/core/permissions.py` ou `frontend/lab-manage/src/lib/permissions.ts` pour la matrice complète). |
