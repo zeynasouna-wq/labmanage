@@ -234,3 +234,26 @@ Domaine plus complexe que les précédents (sous-ressource `lots`, synchronisati
 - `npm run lint`/`build` : sans objet.
 
 **Domaines métier** : ligne `products` mise à jour dans CLAUDE.md → « backend terminé, frontend à refactorer ».
+
+---
+
+## Phase 3 — Backend, module `stock` / movements (`refactor/movements`)
+
+**Date** : 2026-09-17
+
+**Décision d'architecture — logique d'alertes gardée dans `movements`, pas extraite vers `alerts`** : `movement_service.py` d'origine écrit directement dans la table `alerts` (création/résolution automatique selon le niveau de stock et les dates de péremption, fonctions privées `_check_and_create_alerts`/`_upsert_alert`/`_resolve_alert`). Le domaine `alerts` n'a pas encore de router ni de module (cf. décision de la phase 0 : ce sera un `feat` séparé, après `export`). Extraire cette logique vers un futur `modules/alerts/` maintenant aurait changé le découpage sans raison liée à `movements` et risqué le comportement. Décision : ces fonctions restent dans `app/modules/movements/service.py`, et les requêtes sur `Alert` sont ajoutées à `app/modules/movements/repository.py` (`get_active_alert`, `add_alert`, `resolve_active_alerts`) plutôt que directement en ligne dans le service — cohérent avec le reste du module, mais concerne un modèle qui n'appartient pas au domaine `movements`. À reconsidérer quand `alerts` deviendra un module à part entière.
+
+**Fait** :
+1. Tests d'intégration (`backend/tests/integration/test_movements.py`, 16 tests) écrits et verts du premier coup sur le code non refactoré, y compris l'effet de bord sur `Alert` (création à la rupture de stock, résolution au réapprovisionnement), vérifié directement en base (pas d'endpoint `/alerts` pour l'instant).
+2. Découpage : `app/modules/movements/{schemas,repository,service,router}.py`. `service.py` réutilise `app.modules.products.repository` (`get_by_id`, `get_lot_by_id`) pour valider l'existence du produit et l'appartenance du lot — cohérent avec la dépendance `movements → products` de l'audit.
+3. `HTTPException` → exceptions métier : `NotFoundError` (404 — produit/lot/mouvement/produit ou lot associé introuvables) et `ValidationAppError` (400 — stock insuffisant sur une sortie, message dynamique avec quantités disponible/demandée préservé à l'identique).
+4. La chorégraphie exacte d'origine (mise à jour en mémoire du stock du lot et du produit *avant* le commit, un seul commit, puis `_check_and_create_alerts` qui fait son propre `refresh`/commits) a été préservée sans simplification.
+5. `app/routers/movements.py`, `app/services/movement_service.py` supprimés. `app/schemas/schemas.py` : section StockMovement retirée (import `MovementType` devenu inutile, retiré). `main.py` mis à jour.
+
+**Vérifications** :
+- `pytest -q` : 121 passed (105 précédents + 16 nouveaux).
+- `mypy app` : 83 erreurs, 11 fichiers — identique à la baseline (les 9 erreurs de `app/services/movement_service.py` se retrouvent à l'identique dans `app/modules/movements/service.py`).
+- `ruff check .` : 190 (vs 202 après `products`). Erreurs restantes dans les nouveaux fichiers : uniquement des motifs pré-existants reproduits à l'identique (`DTZ005`/`DTZ011` sur `datetime.now()`/`date.today()`, déjà comptés dans l'audit initial ; `B008` habituel).
+- `npm run lint`/`build` : sans objet.
+
+**Domaines métier** : ligne `stock` (movements) mise à jour dans CLAUDE.md → « backend terminé, frontend à refactorer ».

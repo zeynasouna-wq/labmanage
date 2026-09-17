@@ -22,7 +22,7 @@ Ordre de traitement recommandé (racine des dépendances FK en premier, agrégat
 | `locations` | `backend/app/modules/locations/` (`router.py`, `schemas.py`, `service.py`, `repository.py`) | `frontend/lab-manage/app/page.tsx` (`LocationsPage`) | backend terminé, frontend à refactorer |
 | `categories` | `backend/app/modules/categories/` (`router.py`, `schemas.py`, `service.py`, `repository.py`) | `frontend/lab-manage/app/page.tsx` (`CategoriesPage`) | backend terminé, frontend à refactorer |
 | `products` | `backend/app/modules/products/` (`router.py`, `schemas.py`, `service.py`, `repository.py`) | `frontend/lab-manage/app/page.tsx` (`ProductsPage`) | backend terminé, frontend à refactorer |
-| `stock` (movements) | `backend/app/routers/movements.py`, `backend/app/services/movement_service.py` | `frontend/lab-manage/app/page.tsx` (`MovementsPage`) | à refactorer |
+| `stock` (movements) | `backend/app/modules/movements/` (`router.py`, `schemas.py`, `service.py`, `repository.py`) | `frontend/lab-manage/app/page.tsx` (`MovementsPage`) | backend terminé, frontend à refactorer |
 | `export` | `backend/app/routers/export.py`, `backend/app/services/csv_export_service.py` | `frontend/lab-manage/app/page.tsx` (`ExportButton`) | à refactorer |
 | `alerts` | `backend/app/services/alert_service.py` (pas encore de router — à créer, cf. décision `docs/REFACTOR_LOG.md`) | — | à créer (feat, pas un refactor pur) |
 | `dashboard` | `backend/app/services/dashboard_service.py` (pas encore de router — à créer, cf. décision `docs/REFACTOR_LOG.md`) | `frontend/lab-manage/app/page.tsx` (`DashboardPage`, calcul recalculé côté client, à remplacer par un appel API) | à créer (feat, pas un refactor pur) |
