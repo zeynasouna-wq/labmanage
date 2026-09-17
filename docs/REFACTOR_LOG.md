@@ -326,4 +326,34 @@ En lisant `app/page.tsx` en entier (2467 lignes) avant extraction, constat que l
    - `public/`, `next.config.ts`, `eslint.config.mjs`, `postcss.config.mjs`, `package.json` inchangés (restent à la racine, convention Next.js).
    - Vérifié : `npm run build` passe, `npm run lint` renvoie exactement 13 erreurs / 29 avertissements (identique à la baseline, zéro régression).
 
-**À faire** : créer `src/lib/api-client.ts`, puis extraire chaque domaine de `src/app/page.tsx` vers `src/features/<domaine>/`, un à la fois, avec vérification `npm run build` après chaque extraction.
+2. **`src/lib/api-client.ts`** créé (client `api.get/post/patch/del` + `API_BASE`, extraits verbatim). `page.tsx` importe désormais depuis là au lieu de définir `api`/`API_BASE` en ligne.
+3. **Briques UI partagées extraites** : `src/lib/contexts.tsx` (`AuthContext`, `NotifContext`), `src/components/ui/icons.tsx`, `Modal.tsx`, `AccessDenied.tsx`.
+4. **Les 8 domaines extraits un par un**, dans cet ordre (suppliers → categories → locations → users → movements → products → dashboard → export → auth), chacun avec son propre commit `refactor(frontend): extract <domaine> ...`, vérifié par `npm run build` + `npm run lint` après chaque extraction :
+   - `src/features/suppliers/components/SuppliersPage.tsx`
+   - `src/features/categories/components/CategoriesPage.tsx`
+   - `src/features/locations/components/LocationsPage.tsx`
+   - `src/features/users/components/UsersPage.tsx`
+   - `src/features/movements/components/MovementsPage.tsx`
+   - `src/features/products/components/ProductsPage.tsx` + `src/features/products/types.ts` (interfaces `Product`, `ProductLot`, `StockMovement`, `Supplier`, `Location`, `Category`, extraites du bloc `// ─── Type Definitions` de l'ancien `page.tsx` — `ProductLot`/`StockMovement` étaient déjà du code mort avant ce refactor, inutilisés dans l'original)
+   - `src/features/dashboard/components/DashboardPage.tsx`
+   - `src/features/export/components/ExportButton.tsx`
+   - `src/features/auth/components/LoginPage.tsx`
+5. **Shell final extrait** vers `src/components/shell/` : `styles.ts` (le CSS applicatif, renommé `APP_CSS`, injecté via `<style>` exactement comme avant — **pas** fusionné dans `globals.css`, pour ne prendre aucun risque avec l'ordre de cascade CSS), `NotifProvider.tsx`, `nav.ts` (`NAV`/`PAGE_META`), `AppShell.tsx`, `AppRoot.tsx` (ex-`App`, le composant racine avec auth/providers/polices). `src/app/page.tsx` réduit à une ligne : `export { default } from "@/components/shell/AppRoot";`.
+
+**Discipline de vérification appliquée à chaque étape** : après chaque extraction, `npm run build` (doit passer) et `npm run lint` (le nombre exact d'erreurs/avertissements doit être expliqué, pas seulement égal). Plusieurs fois, une extraction a fait apparaître un import désormais inutilisé dans `page.tsx` (ex. `AccessDenied` après `users`, `PermissionService`/`Modal` après `dashboard`, `API_BASE` après `export`, `useContext` après `auth`) : à chaque fois, diagnostiqué précisément (diff du fichier concerné dans la sortie de lint, jamais un simple re-check du total) avant de committer. Le compte est ainsi passé de 42 problèmes (baseline) à 39 (13 erreurs, 26 avertissements) au fil du refactor, uniquement par nettoyage mécanique d'imports orphelins — jamais par simplification ou changement de comportement.
+
+**Test en conditions réelles (au-delà de build/lint)** : aucun outil de navigateur (Chrome, navigateur intégré) n'était disponible dans cet environnement pour un test interactif complet. Vérifié à la place :
+- Backend réel démarré (`uvicorn`, PostgreSQL neuf) + frontend réel démarré (`npm run dev`) pointés l'un sur l'autre via `NEXT_PUBLIC_API_BASE`.
+- Rendu SSR de `/` inspecté via `curl` : affiche correctement l'état de chargement (`<div class="loading-bar">`) attendu avant que `AppRoot` ne sache si un token existe déjà.
+- Payload RSC confirmé : `src/components/shell/AppRoot.tsx` est bien le composant résolu pour la route `/`.
+- Bundle client inspecté : l'URL du backend de test (`127.0.0.1:8123`) est correctement inlinée dans le chunk contenant `api-client.ts`, confirmant que `NEXT_PUBLIC_API_BASE` est bien pris en compte.
+- Aucune erreur de compilation ni d'exécution dans les logs du serveur de dev pendant la requête.
+- Non vérifié faute d'outil : interactions réelles (clic, formulaire de login, rendu visuel des pages une fois authentifié). À faire manuellement par l'utilisateur avant mise en production, ou lors d'une session avec navigateur disponible.
+
+**Vérification finale** : `npm run build` passe, `npm run lint` → 13 erreurs / 26 avertissements, tous tracés individuellement jusqu'à la baseline initiale (13 erreurs / 29 avertissements) — aucune régression, aucun problème non expliqué.
+
+**À faire (hors périmètre de cette session)** :
+- Revisiter la décision sur les 6 fichiers RBAC morts une fois le refactor frontend jugé stable.
+- Introduire `api.ts`/`hooks/`/`types.ts` par domaine si l'équipe veut aller plus loin que le simple découpage en fichiers (actuellement chaque feature appelle encore `@/lib/api-client` directement depuis son composant, comme le faisait l'ancien code).
+- `docs/ARCHITECTURE.md` (phase 5) reste à créer.
+- Test interactif en navigateur réel à faire par l'utilisateur (aucun outil de navigateur disponible dans cette session).

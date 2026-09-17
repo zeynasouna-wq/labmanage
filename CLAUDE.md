@@ -16,16 +16,16 @@ Ordre de traitement recommandé (racine des dépendances FK en premier, agrégat
 
 | Domaine | Backend | Frontend | État |
 |---|---|---|---|
-| `auth` | `backend/app/modules/auth/` (`router.py`, `schemas.py`, `service.py`) | `frontend/lab-manage/app/page.tsx` (`LoginPage`) | backend terminé, frontend à refactorer |
-| `users` | `backend/app/modules/users/` (`router.py`, `schemas.py`, `service.py`, `repository.py`) | `frontend/lab-manage/app/page.tsx` (`UsersPage`), `lib/rbac.ts`, `lib/permissions.ts` | backend terminé, frontend à refactorer |
-| `suppliers` | `backend/app/modules/suppliers/` (`router.py`, `schemas.py`, `service.py`, `repository.py`) | `frontend/lab-manage/app/page.tsx` (`SuppliersPage`) | backend terminé, frontend à refactorer |
-| `locations` | `backend/app/modules/locations/` (`router.py`, `schemas.py`, `service.py`, `repository.py`) | `frontend/lab-manage/app/page.tsx` (`LocationsPage`) | backend terminé, frontend à refactorer |
-| `categories` | `backend/app/modules/categories/` (`router.py`, `schemas.py`, `service.py`, `repository.py`) | `frontend/lab-manage/app/page.tsx` (`CategoriesPage`) | backend terminé, frontend à refactorer |
-| `products` | `backend/app/modules/products/` (`router.py`, `schemas.py`, `service.py`, `repository.py`) | `frontend/lab-manage/app/page.tsx` (`ProductsPage`) | backend terminé, frontend à refactorer |
-| `stock` (movements) | `backend/app/modules/movements/` (`router.py`, `schemas.py`, `service.py`, `repository.py`) | `frontend/lab-manage/app/page.tsx` (`MovementsPage`) | backend terminé, frontend à refactorer |
-| `export` | `backend/app/modules/export/` (`router.py`, `service.py`, `repository.py`) | `frontend/lab-manage/app/page.tsx` (`ExportButton`) | backend terminé, frontend à refactorer |
-| `alerts` | `backend/app/services/alert_service.py` (pas encore de router — à créer, cf. décision `docs/REFACTOR_LOG.md`) | — | à créer (feat, pas un refactor pur) |
-| `dashboard` | `backend/app/services/dashboard_service.py` (pas encore de router — à créer, cf. décision `docs/REFACTOR_LOG.md`) | `frontend/lab-manage/app/page.tsx` (`DashboardPage`, calcul recalculé côté client, à remplacer par un appel API) | à créer (feat, pas un refactor pur) |
+| `auth` | `backend/app/modules/auth/` (`router.py`, `schemas.py`, `service.py`) | `frontend/lab-manage/src/features/auth/components/LoginPage.tsx` | terminé |
+| `users` | `backend/app/modules/users/` (`router.py`, `schemas.py`, `service.py`, `repository.py`) | `frontend/lab-manage/src/features/users/components/UsersPage.tsx` | terminé |
+| `suppliers` | `backend/app/modules/suppliers/` (`router.py`, `schemas.py`, `service.py`, `repository.py`) | `frontend/lab-manage/src/features/suppliers/components/SuppliersPage.tsx` | terminé |
+| `locations` | `backend/app/modules/locations/` (`router.py`, `schemas.py`, `service.py`, `repository.py`) | `frontend/lab-manage/src/features/locations/components/LocationsPage.tsx` | terminé |
+| `categories` | `backend/app/modules/categories/` (`router.py`, `schemas.py`, `service.py`, `repository.py`) | `frontend/lab-manage/src/features/categories/components/CategoriesPage.tsx` | terminé |
+| `products` | `backend/app/modules/products/` (`router.py`, `schemas.py`, `service.py`, `repository.py`) | `frontend/lab-manage/src/features/products/components/ProductsPage.tsx` + `types.ts` | terminé |
+| `stock` (movements) | `backend/app/modules/movements/` (`router.py`, `schemas.py`, `service.py`, `repository.py`) | `frontend/lab-manage/src/features/movements/components/MovementsPage.tsx` | terminé |
+| `export` | `backend/app/modules/export/` (`router.py`, `service.py`, `repository.py`) | `frontend/lab-manage/src/features/export/components/ExportButton.tsx` | terminé |
+| `dashboard` | `backend/app/services/dashboard_service.py` (pas encore de router — à créer, cf. décision `docs/REFACTOR_LOG.md`) | `frontend/lab-manage/src/features/dashboard/components/DashboardPage.tsx` (calcul recalculé côté client, à remplacer par un appel API une fois le backend `dashboard` créé) | frontend terminé, backend à créer (feat) |
+| `alerts` | `backend/app/services/alert_service.py` (pas encore de router — à créer, cf. décision `docs/REFACTOR_LOG.md`) | — (pas de page dédiée ; `AlertResponse`/`AlertAcknowledge` existent côté backend, jamais exposées) | à créer (feat, pas un refactor pur) |
 
 Mettre à jour la colonne « État » à la fin de chaque module (`à refactorer` → `en cours` → `terminé`).
 
@@ -130,13 +130,18 @@ Base de test :
 
 ## Frontend — architecture
 
-Racine du projet frontend : `frontend/lab-manage/`, avec un dossier `src/` (`src/app/`, `src/components/`, `src/lib/` — déplacement effectué en phase 4).
+Racine du projet frontend : `frontend/lab-manage/`, avec un dossier `src/` (déplacement effectué en phase 4).
 
-**État actuel** : tout le métier (Dashboard, Products, Suppliers, Movements, Users, Categories, Locations) est encore défini comme des fonctions internes à `frontend/lab-manage/src/app/page.tsx` (~2500 lignes), chacune avec son propre appel `fetch`. Il n'y a pas encore de `src/features/`, ni `src/components/ui/`, ni client HTTP unique — extraction en cours, un domaine à la fois (voir `docs/REFACTOR_LOG.md`).
+**État actuel (phase 4 terminée)** :
+- `src/app/page.tsx` : 1 ligne, `export { default } from "@/components/shell/AppRoot";` — plus aucun métier, aucun `fetch`, aucune logique.
+- `src/features/<domaine>/components/` : une page par domaine (`auth/LoginPage`, `users/UsersPage`, `suppliers/SuppliersPage`, `locations/LocationsPage`, `categories/CategoriesPage`, `products/ProductsPage` + `products/types.ts`, `movements/MovementsPage`, `dashboard/DashboardPage`, `export/ExportButton`), extraites verbatim depuis l'ancien `page.tsx` monolithique.
+- `src/components/ui/` : `icons.tsx`, `Modal.tsx`, `AccessDenied.tsx` — génériques, sans logique métier.
+- `src/components/shell/` : infrastructure transverse propre à cette appli (pas dans la cible générique ci-dessous, mais nécessaire) — `AppRoot.tsx` (auth, providers, polices), `AppShell.tsx` (sidebar + aiguillage des pages), `NotifProvider.tsx`, `nav.ts` (`NAV`/`PAGE_META`), `styles.ts` (le CSS applicatif, injecté via `<style>`, jamais fusionné dans `globals.css` pour éviter tout risque de collision de cascade).
+- `src/lib/api-client.ts` : client HTTP unique (`api.get/post/patch/del`, gestion 401/erreurs FastAPI), `src/lib/contexts.tsx` (`AuthContext`, `NotifContext`), `src/lib/permissions.ts` (`PermissionService`, inchangé).
 
 **Code mort connu, non touché** : `src/components/{Navigation,ProtectedActions,RoleGuard,RoleProtectedPage}.tsx` et `src/lib/{navigation,rbac}.ts` (788 lignes) forment un système RBAC alternatif jamais branché à l'application réelle (qui utilise `src/lib/permissions.ts` directement). Décision utilisateur (2026-09-17) : laissés en l'état pour l'instant.
 
-Cible :
+Cible (respectée pour les nouveaux domaines ; `api.ts`/`hooks/` par domaine pas encore introduits — chaque feature appelle encore `@/lib/api-client` directement depuis son composant, comme le faisait le code d'origine) :
 - `src/app/` : pages et layouts uniquement. Une page assemble des composants, elle ne contient ni `fetch` ni logique.
 - `src/features/<domaine>/` : `components/`, `hooks/`, `api.ts` (appels API du domaine), `types.ts`
 - `src/components/ui/` : composants génériques sans logique métier (Button, Modal, Table…)
