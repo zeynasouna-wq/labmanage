@@ -18,8 +18,8 @@ Ordre de traitement recommandé (racine des dépendances FK en premier, agrégat
 |---|---|---|---|
 | `auth` | `backend/app/modules/auth/` (`router.py`, `schemas.py`, `service.py`) | `frontend/lab-manage/app/page.tsx` (`LoginPage`) | backend terminé, frontend à refactorer |
 | `users` | `backend/app/modules/users/` (`router.py`, `schemas.py`, `service.py`, `repository.py`) | `frontend/lab-manage/app/page.tsx` (`UsersPage`), `lib/rbac.ts`, `lib/permissions.ts` | backend terminé, frontend à refactorer |
-| `suppliers` | `backend/app/routers/suppliers.py`, `backend/app/services/supplier_service.py` | `frontend/lab-manage/app/page.tsx` (`SuppliersPage`) | à refactorer |
-| `locations` | `backend/app/routers/locations.py` (pas de service — SQL direct dans le router) | `frontend/lab-manage/app/page.tsx` (`LocationsPage`) | à refactorer |
+| `suppliers` | `backend/app/modules/suppliers/` (`router.py`, `schemas.py`, `service.py`, `repository.py`) | `frontend/lab-manage/app/page.tsx` (`SuppliersPage`) | backend terminé, frontend à refactorer |
+| `locations` | `backend/app/modules/locations/` (`router.py`, `schemas.py`, `service.py`, `repository.py`) | `frontend/lab-manage/app/page.tsx` (`LocationsPage`) | backend terminé, frontend à refactorer |
 | `categories` | `backend/app/routers/categories.py` (pas de service — SQL direct dans le router) | `frontend/lab-manage/app/page.tsx` (`CategoriesPage`) | à refactorer |
 | `products` | `backend/app/routers/products.py`, `backend/app/services/product_service.py` | `frontend/lab-manage/app/page.tsx` (`ProductsPage`) | à refactorer |
 | `stock` (movements) | `backend/app/routers/movements.py`, `backend/app/services/movement_service.py` | `frontend/lab-manage/app/page.tsx` (`MovementsPage`) | à refactorer |

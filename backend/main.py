@@ -18,14 +18,14 @@ from app.core.security import get_password_hash
 from app.db.session import DATABASE_URL, Base, SessionLocal, engine
 from app.models.models import User, UserRole, UserStatus
 from app.modules.auth.router import router as auth_router
+from app.modules.locations.router import router as locations_router
+from app.modules.suppliers.router import router as suppliers_router
 from app.modules.users.router import router as users_router
 from app.routers import (
     categories,
     export,
-    locations,
     movements,
     products,
-    suppliers,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -55,11 +55,11 @@ app.add_middleware(
 # Include routers
 app.include_router(auth_router)
 app.include_router(users_router)
-app.include_router(suppliers.router)
+app.include_router(suppliers_router)
 app.include_router(products.router)
 app.include_router(movements.router)
 app.include_router(categories.router)
-app.include_router(locations.router)
+app.include_router(locations_router)
 app.include_router(export.router)
 
 

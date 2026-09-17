@@ -3,64 +3,14 @@ from datetime import date, datetime
 from pydantic import BaseModel, field_validator
 
 from app.models.models import AlertStatus, AlertType, MovementType
+from app.modules.locations.schemas import LocationResponse
+from app.modules.suppliers.schemas import SupplierResponse
 
 # Auth and User schemas moved to app/modules/auth/schemas.py and
 # app/modules/users/schemas.py (see docs/REFACTOR_LOG.md, users/auth module).
-
-
-# ─── Supplier Schemas ─────────────────────────────────────────────────────────
-
-
-class SupplierCreate(BaseModel):
-    name: str
-    contact: str | None = None
-    email: str | None = None
-    phone: str | None = None
-    address: str | None = None
-
-
-class SupplierUpdate(BaseModel):
-    name: str | None = None
-    contact: str | None = None
-    email: str | None = None
-    phone: str | None = None
-    address: str | None = None
-
-
-class SupplierResponse(BaseModel):
-    id: int
-    name: str
-    contact: str | None = None
-    email: str | None = None
-    phone: str | None = None
-    address: str | None = None
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-# ─── Location Schemas ─────────────────────────────────────────────────────────
-
-
-class LocationCreate(BaseModel):
-    name: str
-    description: str | None = None
-    temperature_controlled: bool = False
-
-
-class LocationUpdate(BaseModel):
-    name: str | None = None
-    description: str | None = None
-    temperature_controlled: bool | None = None
-
-
-class LocationResponse(BaseModel):
-    id: int
-    name: str
-    description: str | None = None
-    temperature_controlled: bool
-
-    model_config = {"from_attributes": True}
+# Supplier and Location schemas moved to app/modules/suppliers/schemas.py and
+# app/modules/locations/schemas.py; their Response schemas are re-imported
+# here because ProductResponse (still unrefactored) nests both.
 
 
 # ─── Category Schemas ─────────────────────────────────────────────────────────

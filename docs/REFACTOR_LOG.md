@@ -137,3 +137,54 @@ En créant `backend/.env` (copie de `.env.example`, geste documenté par le fich
 **Problème** : aucun.
 
 **Domaines métier** : lignes `auth` et `users` mises à jour dans CLAUDE.md → « backend terminé, frontend à refactorer ».
+
+---
+
+## Phase 3 — Backend, module `suppliers` (`refactor/suppliers`)
+
+**Date** : 2026-09-17
+
+**Fait** :
+1. Tests d'intégration figeant le comportement actuel (`backend/tests/integration/test_suppliers.py`, 15 tests) écrits **avant** tout découpage, commit séparé. Deux erreurs corrigées dans les tests eux-mêmes avant le premier commit vert (pas dans le code applicatif) : le helper `make_user` local ne fixait pas `status=UserStatus.active` (les nouveaux utilisateurs recevaient le défaut `pending`, provoquant un faux 403) ; une faute de frappe dans le message attendu (« les » vs « des fournisseurs »). Une fois ces deux erreurs de test corrigées, 15/15 passent sur le code non refactoré.
+2. Découpage : `app/modules/suppliers/{schemas,repository,service,router}.py`, suivant le même schéma que `users` (repository = accès DB pur, service lève les exceptions métier de `app/core/exceptions.py`, router inchangé au niveau des permissions/status codes).
+3. `HTTPException` → exceptions métier : `NotFoundError` (404 — fournisseur introuvable), `ValidationAppError` (400 — nom dupliqué à la création et à la modification, suppression bloquée si le fournisseur a des produits liés, message dynamique avec le nombre de produits préservé à l'identique).
+4. `app/routers/suppliers.py`, `app/services/supplier_service.py` supprimés. `app/schemas/schemas.py` : section Supplier retirée, mais `SupplierResponse` ré-importée depuis `app.modules.suppliers.schemas` car `ProductResponse` (pas encore refactoré) l'imbrique toujours — nécessaire tant que `products` n'est pas traité.
+5. `main.py` mis à jour vers `app.modules.suppliers.router`.
+
+**Vérifications** :
+- `pytest -q` : 53 passed (38 précédents + 15 nouveaux), aucun test modifié pour passer.
+- `mypy app` : 83 erreurs, 11 fichiers — identique à la baseline (le module `suppliers` n'avait et n'a aucune erreur mypy).
+- `ruff check .` (repo entier) : 224 (vs 230 après le module `users`/`auth`). Un `SIM102` (if imbriqués) relevé dans `service.py` : c'est la même occurrence unique déjà comptée dans l'audit initial (`update_supplier`), simplement déplacée — laissée telle quelle par cohérence avec le traitement des autres motifs pré-existants (`B008`, `BLE001`) dans ce refactor.
+- `npm run lint`/`build` : sans objet, frontend non touché.
+
+**Problème** : aucun côté application. Les deux erreurs listées ci-dessus étaient dans mes propres tests, corrigées avant le premier commit.
+
+**Domaines métier** : ligne `suppliers` mise à jour dans CLAUDE.md → « backend terminé, frontend à refactorer ».
+
+---
+
+## Phase 3 — Backend, module `locations` (`refactor/locations`)
+
+**Date** : 2026-09-17
+
+**BUG DÉCOUVERT — création/renommage en doublon crashe (500 non géré)** :
+
+Contrairement à `suppliers`, le router `locations` d'origine (`app/routers/locations.py`) ne fait **aucune vérification applicative** de nom dupliqué avant `db.add()`/`db.commit()`, ni en création ni en modification. Or `Location.name` porte une contrainte `UNIQUE` en base (`app/models/models.py`). Résultat vérifié empiriquement (test écrit puis retiré, voir commit `3235094`) : POST `/locations/` avec un nom déjà utilisé lève une `sqlalchemy.exc.IntegrityError` **non interceptée**, qui remonte telle quelle — un 500 non contrôlé côté client au lieu d'un 400 propre comme pour `/suppliers`. Le même problème existe très probablement sur PATCH (renommage vers un nom déjà pris), non testé explicitement mais même mécanisme.
+
+**Non corrigé**, conformément à la règle « bug découvert : noter sans corriger ». Le découpage reproduit ce comportement à l'identique (aucune vérification de doublon ajoutée dans `modules/locations/service.py`) : corriger ceci serait un changement de comportement (nouveau code de retour 400 à la place d'un crash), à traiter par une décision explicite si souhaité.
+
+**Autre écart avec `suppliers`** (comportement existant, non un bug en soi) : `delete_location` ne vérifie pas si la localisation a des produits liés (contrairement à `delete_supplier`). Comme `Product.location_id` n'a pas de contrainte `ON DELETE` explicite, la suppression d'une localisation encore référencée par des produits dépend du comportement par défaut de PostgreSQL sur la FK — non testé ici (pas d'assertion écrite), comportement à vérifier si le sujet revient.
+
+**Fait** :
+1. Tests d'intégration (`backend/tests/integration/test_locations.py`, 12 tests) écrits et validés sur le code non refactoré. Le test initialement prévu pour « doublon autorisé » a révélé le bug ci-dessus ; remplacé par un commentaire documentant le crash plutôt que par une assertion (asserter un crash comme comportement « attendu » n'aurait pas de sens). Un test vérifie explicitement que la suppression est réservée aux admins malgré le commentaire trompeur du router (« Techniciens et admins ») — `PermissionChecker.can_delete_location` ne vérifie en réalité que `role == admin`.
+2. Découpage : `app/modules/locations/{schemas,repository,service,router}.py`, même schéma que `suppliers`/`users`. `update_location` conserve exactement la logique originale (`if data.field is not None: ...`), différente du `model_dump(exclude_unset=True)` utilisé pour `suppliers`/`users` — pattern d'origine préservé sans uniformisation, pour ne rien changer au comportement (envoyer explicitement `null` sur un champ ne l'efface pas, contrairement à `suppliers`).
+3. `HTTPException` → `NotFoundError` (404 — localisation non trouvée, seul cas d'erreur métier existant dans ce module).
+4. `app/routers/locations.py` supprimé. `app/schemas/schemas.py` : section Location retirée ; `LocationResponse` ré-importée depuis le nouveau module (nécessaire pour `ProductResponse`, toujours pas refactoré). `main.py` mis à jour.
+
+**Vérifications** :
+- `pytest -q` : 65 passed (53 précédents + 12 nouveaux).
+- `mypy app` : 83 erreurs, 11 fichiers — identique à la baseline (`locations` n'avait et n'a toujours aucune erreur mypy).
+- `ruff check .` : 222 (vs 224 après `suppliers`).
+- `npm run lint`/`build` : sans objet.
+
+**Domaines métier** : ligne `locations` mise à jour dans CLAUDE.md → « backend terminé, frontend à refactorer ».
