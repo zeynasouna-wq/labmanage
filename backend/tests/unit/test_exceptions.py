@@ -30,6 +30,26 @@ def test_app_error_can_carry_headers():
     assert exc.headers == {"WWW-Authenticate": "Bearer"}
 
 
+def test_settings_accepts_test_and_alert_env_vars(monkeypatch):
+    monkeypatch.setenv(
+        "TEST_DATABASE_URL",
+        "postgresql://postgres:postgres@localhost:5433/labmanage_test",
+    )
+    monkeypatch.setenv("ALERT_CHECK_INTERVAL_HOURS", "24")
+    monkeypatch.setenv("EXPIRY_ALERT_DAYS_BEFORE", "30")
+
+    from app.core.config import Settings
+
+    settings = Settings()
+
+    assert (
+        settings.TEST_DATABASE_URL
+        == "postgresql://postgres:postgres@localhost:5433/labmanage_test"
+    )
+    assert settings.ALERT_CHECK_INTERVAL_HOURS == 24
+    assert settings.EXPIRY_ALERT_DAYS_BEFORE == 30
+
+
 @pytest.mark.anyio
 async def test_handler_matches_default_http_exception_handler_body_and_status():
     app_exc = NotFoundError("Product 42 not found")
