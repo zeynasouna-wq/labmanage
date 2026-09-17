@@ -257,3 +257,41 @@ Domaine plus complexe que les précédents (sous-ressource `lots`, synchronisati
 - `npm run lint`/`build` : sans objet.
 
 **Domaines métier** : ligne `stock` (movements) mise à jour dans CLAUDE.md → « backend terminé, frontend à refactorer ».
+
+---
+
+## Phase 3 — Backend, module `export` (`refactor/export`)
+
+**Date** : 2026-09-17
+
+Dernier domaine backend de la phase 3. Agrégateur transversal (lit dans `products`, `movements`, `alerts`, `users`, `suppliers`, `locations`, `categories`), traité en dernier comme prévu dans l'ordre de l'audit.
+
+**Fait** :
+1. Tests d'intégration (`backend/tests/integration/test_export.py`, 11 tests) écrits et verts du premier coup : permission admin-only (message identique sur les 9 routes), export ZIP (`/csv/all`), en-têtes + une ligne de données pour chacun des 8 CSV individuels (colonnes et ordre gelés).
+2. Découpage : `app/modules/export/{repository,service,router}.py`. Pas de `schemas.py` (aucun schéma Pydantic dans ce domaine — réponses `Response`/`StreamingResponse` brutes).
+3. `CSVExportService` (classe à méthodes statiques) convertie en fonctions de module dans `service.py`, pour rester cohérent avec le style des autres modules refactorés — formatage CSV strictement identique, vérifié par les tests.
+4. `repository.py` : requêtes **non paginées** (`db.query(Model).all()`), volontairement **sans réutiliser** les fonctions `list_*` déjà paginées de `suppliers`/`locations`/`categories` (qui ont `limit=100` par défaut) — les réutiliser aurait tronqué silencieusement les exports au-delà de 100 lignes. Documenté en commentaire dans le fichier.
+5. `router.py` : le pattern `try/except Exception as e: raise HTTPException(500, ...)` de chaque route est conservé tel quel (pas remplacé par une exception métier — ce n'est pas une règle métier unique mais un filet de sécurité générique attrapant tout, hors du cas d'usage prévu pour `AppError`).
+6. Petit nettoyage sans impact : la variable locale `name_without_ext` dans `create_zip_export` (calculée mais jamais utilisée dans l'original) a été retirée.
+7. `app/routers/export.py`, `app/services/csv_export_service.py` supprimés. `main.py` mis à jour.
+
+**Constat** : `backend/app/routers/` ne contient plus que `__init__.py` — les 7 domaines backend prévus dans l'ordre de traitement sont tous découpés. `backend/app/services/` ne contient plus que `alert_service.py` et `dashboard_service.py` (code mort, non touché — cf. décision de la phase 0).
+
+**Vérifications** :
+- `pytest -q` : 132 passed (121 précédents + 11 nouveaux).
+- `mypy app` : 83 erreurs, 11 fichiers — identique à la baseline (`export` n'avait et n'a toujours aucune erreur mypy).
+- `ruff check .` : 175 (vs 190 après `movements`).
+- `npm run lint`/`build` : sans objet.
+
+**Domaines métier** : ligne `export` mise à jour dans CLAUDE.md → « backend terminé, frontend à refactorer ».
+
+---
+
+## Bilan phase 3 backend (users/auth → export)
+
+Les 7 domaines backend de l'ordre de traitement sont refactorés (`auth`, `users`, `suppliers`, `locations`, `categories`, `products`, `stock`/movements, `export`) : structure `router → service → repository`, `HTTPException` remplacée par les exceptions métier de `app/core/exceptions.py` partout où c'était le cas d'origine, aucun changement de comportement (132 tests d'intégration figeant le comportement pré-refactor, tous verts après découpage, jamais modifiés). `mypy`/`ruff` stables ou en amélioration à chaque étape (aucune régression introduite).
+
+Restent, hors périmètre de cette phase (décisions déjà actées, cf. entrées ci-dessus) :
+- `alerts` et `dashboard` : code mort non branché, réservé à un `feat` séparé (décision utilisateur, phase 0).
+- Bugs pré-existants découverts et documentés sans être corrigés : migrations Alembic no-op (`create_all` non retiré), `Settings` qui plante sur une clé `.env` non déclarée, doublons de nom non gérés sur `locations`/`categories` (crash 500 au lieu d'un 400 propre, contrairement à `suppliers`).
+- Frontend (phase 4) : aucun fichier de `frontend/lab-manage/` touché à ce stade.
