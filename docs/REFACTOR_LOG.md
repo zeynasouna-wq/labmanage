@@ -33,4 +33,20 @@ Conclusion transmise à l'utilisateur : travail backend **inachevé**, pas du co
 
 ## Phase 1 — Nettoyage (`chore/cleanup`)
 
-*(à venir)*
+**Date** : 2026-09-17
+
+**Fait** :
+- Suppression de `frontend/lab-manage/app/ExportComponent.tsx` (264 lignes), confirmé inutilisé : aucun import trouvé nulle part dans `frontend/lab-manage` (`grep -rn "ExportComponent"` ne trouve que sa propre définition). Dupliquait la fonction `ExportButton` déjà définie et utilisée dans `app/page.tsx`.
+
+**Correction de l'audit initial — `database_url_fixed` NON supprimé** :
+- L'audit de la phase précédente avait conclu à tort que `Settings.database_url_fixed` (`backend/app/core/config.py`) était mort, car la recherche n'avait couvert que `backend/app` et les scripts racine.
+- En réalité, `backend/alembic/env.py:13` l'utilise : `config.set_main_option("sqlalchemy.url", settings.database_url_fixed)`. C'est la propriété qui fournit l'URL de connexion à Alembic pour toutes les migrations.
+- **Non supprimé.** Le duplicata avec `db/session.py::get_database_url()` (même logique de correction `postgres://` → `postgresql://`) reste donc en l'état — les deux fonctions font la même chose pour deux consommateurs différents (SQLAlchemy runtime vs Alembic). Fusionner les deux serait un vrai refactor (pas juste une suppression de code mort) : à considérer plus tard, hors du périmètre de ce nettoyage.
+
+**Vérifications** :
+- `ruff check backend/.` : 318 erreurs (inchangé, aucun fichier backend modifié dans cette phase).
+- `mypy backend/app` : 83 erreurs (inchangé).
+- `pytest -q` (backend) : aucun test collecté (inchangé, attendu — la base de test arrive en phase 2).
+- `npm run lint` / `npm run build` (frontend) : **impossible à exécuter dans cet environnement** — `npm` n'est pas installé (seul `node` v12.22.9 est présent via apt, sans npm, et incompatible avec Next.js 16.2.3 qui exige Node ≥ 20). Suppression d'un fichier non importé nulle part et donc sans effet de compilation attendu, mais **non vérifié par un build réel**. À relancer manuellement ou sur CI avant de considérer cette phase totalement validée.
+
+**Problème** : outillage `npm`/Node absent de cet environnement d'exécution — bloque la vérification `npm run lint`/`npm run build` requise après chaque étape touchant le frontend (phase 4 en particulier). Signalé à l'utilisateur.
